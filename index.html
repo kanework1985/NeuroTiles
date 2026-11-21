@@ -666,8 +666,13 @@
         </div>
 
         <!-- 提示文字（輪到誰出牌與剩餘秒數） -->
-        <div id="turn-status-banner" class="text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-400/40 text-emerald-200">
-          準備開始...
+        <div class="flex items-center gap-1.5">
+          <div id="turn-status-banner" class="text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-400/40 text-emerald-200">
+            準備開始...
+          </div>
+          <button type="button" id="force-unstick-btn" class="px-2 py-1 rounded-full bg-amber-600/80 hover:bg-amber-500 border border-amber-300/60 text-white text-[11px] font-bold shadow transition" title="若網路延遲導致牌局停頓，點擊可立即同步推進">
+            ⚡ 催牌
+          </button>
         </div>
 
         <!-- 自家花牌與明牌區 -->
@@ -2296,517 +2301,68 @@
 
       peer.on('open', (id) => {
         appState.myPeerId = id;
-        const conn = peer.connect(`MJ_GH_${code}`, { reliable: true });
-        appState.hostConn = conn;
+        const connectToHost = () => {
+          const conn = peer.connect(`MJ_GH_${code}`, { reliable: true });
+          appState.hostConn = conn;
 
-        conn.on('open', () => {
-          conn.send({
-            type: 'JOIN_REQUEST',
-            name: appState.myName,
-            peerId: id
+          conn.on('open', () => {
+            conn.send({
+              type: 'JOIN_REQUEST',
+              name: appState.myName,
+              peerId: id
+            });
           });
-        });
 
-        conn.on('data', (msg) => {
-          handleGuestReceiveData(msg);
-        });
+          conn.on('data', (msg) => {
+            handleGuestReceiveData(msg);
+          });
 
-        conn.on('close', () => {
-          isJoiningRoom = false;
-          joinBtn.disabled = false;
-          joinBtn.classList.remove('opacity-60');
-          showLobbyToast('與房主的連線已中斷。', true);
-          document.getElementById('game-screen').classList.add('hidden');
-          document.getElementById('lobby-screen').classList.remove('hidden');
-        });
+          conn.on('close', () => {
+            isJoiningRoom = false;
+            joinBtn.disabled = false;
+            joinBtn.classList.remove('opacity-60');
+            // 若在對戰中短暫斷線，嘗試自動重連回原房間而非直接踢回大廳
+            if (appState.game) {
+              const banner = document.getElementById('turn-status-banner');
+              if (banner) banner.textContent = '🔄 網路瞬斷，正在自動重新連線至牌桌...';
+              setTimeout(() => {
+                if (appState.peer && !appState.peer.destroyed && appState.game) {
+                  connectToHost();
+                }
+              }, 1500);
+            } else {
+              showLobbyToast('與房主的連線已中斷。', true);
+              document.getElementById('game-screen').classList.add('hidden');
+              document.getElementById('lobby-screen').classList.remove('hidden');
+            }
+          });
+        };
+        connectToHost();
       });
 
       peer.on('error', () => {
-        isJoiningRoom = false;
-        joinBtn.disabled = false;
-        joinBtn.classList.remove('opacity-60');
-        showLobbyToast(`無法連線至房號 ${code}（請確認房號或改用左側單機 AI 開局）`, true);
-      });
-    });
-
-    // 房主處理來自訪客的封包（含同 PeerID 重複申請去重防護）
-    function handleHostReceiveData(conn, msg) {
-      if (msg.type === 'JOIN_REQUEST') {
-        const senderPeerId = msg.peerId || conn.peer;
-        const existingSeat = appState.seats.find(s => !s.isAI && s.peerId === senderPeerId);
-        if (existingSeat) {
-          existingSeat.name = msg.name;
-          conn.send({
-            type: 'JOIN_ACCEPTED',
-            assignedSeat: existingSeat.seat,
-            roomCode: appState.roomCode,
-            rule: document.getElementById('rule-select').value,
-            shuffleMode: appState.shuffleMode,
-            turnTimeoutSec: appState.turnTimeoutSec,
-            seats: appState.seats
-          });
-          broadcastLobbyState();
-          return;
-        }
-
-        const emptySeat = appState.seats.find(s => s.isAI && s.seat !== 0);
-        if (!emptySeat || appState.game) {
-          conn.send({ type: 'JOIN_REJECTED', reason: appState.game ? '牌局已經開始了！' : '房間已滿 4 人！' });
-          return;
-        }
-        emptySeat.isAI = false;
-        emptySeat.name = msg.name;
-        emptySeat.peerId = senderPeerId;
-
-        conn.send({
-          type: 'JOIN_ACCEPTED',
-          assignedSeat: emptySeat.seat,
-          roomCode: appState.roomCode,
-          rule: document.getElementById('rule-select').value,
-          shuffleMode: appState.shuffleMode,
-          turnTimeoutSec: appState.turnTimeoutSec,
-          seats: appState.seats
-        });
-        broadcastLobbyState();
+// ... existing code ... -->
       } else if (msg.type === 'PLAYER_ACTION') {
         if (appState.game) {
           processPlayerGameAction(msg.seat, msg.action);
+        }
+      } else if (msg.type === 'SYNC_REQUEST') {
+        // 訪客切背景回來或催牌時，立刻回傳最新牌局狀態
+        if (appState.game && conn.open) {
+          conn.send({
+            type: 'GAME_STATE_UPDATE',
+            game: appState.game,
+            soundEvent: null,
+            fxText: null,
+            triggerShuffleAnim: false
+          });
         }
       }
     }
 
     // 訪客處理來自房主的封包
-    function handleGuestReceiveData(msg) {
-      if (msg.type === 'JOIN_REJECTED') {
-        isJoiningRoom = false;
-        const joinBtn = document.getElementById('join-room-btn');
-        joinBtn.disabled = false;
-        joinBtn.classList.remove('opacity-60');
-        showLobbyToast(msg.reason, true);
-      } else if (msg.type === 'JOIN_ACCEPTED') {
-        isJoiningRoom = false;
-        const joinBtn = document.getElementById('join-room-btn');
-        joinBtn.disabled = false;
-        joinBtn.classList.remove('opacity-60');
-        appState.mySeat = msg.assignedSeat;
-        appState.seats = msg.seats;
-        appState.shuffleMode = msg.shuffleMode || 'electric';
-        appState.turnTimeoutSec = msg.turnTimeoutSec || 12;
-        document.getElementById('rule-select').value = msg.rule;
-        enterWaitingRoomUI();
-        showLobbyToast(`成功加入牌桌！您被分配在「${WIND_LABELS[appState.mySeat]}風位」`);
-      } else if (msg.type === 'LOBBY_UPDATE') {
-        appState.seats = msg.seats;
-        appState.shuffleMode = msg.shuffleMode || 'electric';
-        appState.turnTimeoutSec = msg.turnTimeoutSec || 12;
-        document.getElementById('rule-select').value = msg.rule;
-        renderWaitingSeats();
-      } else if (msg.type === 'GAME_STATE_UPDATE') {
-        appState.game = msg.game;
-        appState.shuffleMode = msg.game.shuffleMode;
-        appState.turnTimeoutSec = msg.game.turnTimeoutSec;
-        if (msg.soundEvent === 'discard') sound.playDiscard(msg.soundTile);
-        if (msg.soundEvent === 'action') sound.playAction(msg.speechWord);
-        if (msg.soundEvent === 'win') sound.playWin(msg.speechWord);
-        if (msg.fxText) triggerActionFX(msg.fxText);
-        if (msg.triggerShuffleAnim) {
-          runAnimatedDealSequence(msg.game, false);
-        } else {
-          enterGameTableUI();
-          renderFullGameTable();
-          startLocalTurnCountdownUI();
-        }
-      }
-    }
-
-    // ------------------------- 8.5 等待室 UI 渲染、AI 性格設定與廣播 -------------------------
-    function getRoomInviteUrl() {
-      const url = new URL(window.location.href);
-      url.searchParams.set('room', appState.roomCode);
-      return url.toString();
-    }
-
-    function renderRoomInviteQRCode() {
-      const inviteUrl = getRoomInviteUrl();
-      const previewEl = document.getElementById('invite-url-preview');
-      if (previewEl) previewEl.textContent = inviteUrl;
-
-      const qrBox = document.getElementById('room-qrcode-box');
-      if (!qrBox) return;
-      qrBox.innerHTML = '';
-
-      if (typeof QRCode !== 'undefined') {
-        try {
-          new QRCode(qrBox, {
-            text: inviteUrl,
-            width: 108,
-            height: 108,
-            colorDark: '#0f172a',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-          });
-        } catch (e) {
-          qrBox.innerHTML = `<span class="text-xs font-mono font-bold text-stone-800">${appState.roomCode}</span>`;
-        }
-      } else {
-        qrBox.innerHTML = `<span class="text-xs font-mono font-bold text-stone-800">${appState.roomCode}</span>`;
-      }
-    }
-
-    function enterWaitingRoomUI() {
-      document.getElementById('lobby-setup-panel').classList.add('hidden');
-      document.getElementById('waiting-room-panel').classList.remove('hidden');
-      document.getElementById('display-room-code').textContent = appState.roomCode;
-      renderRoomInviteQRCode();
-
-      const ruleMap = {
-        TW16: '🇹🇼 台灣 16 張麻將',
-        JP13: '🇯🇵 日本立直麻將',
-        GD13: '🇭🇰 廣東 13 張麻將'
-      };
-      const curRule = document.getElementById('rule-select').value;
-      document.getElementById('display-rule-badge').textContent = ruleMap[curRule] || '🇹🇼 台灣 16 張麻將';
-
-      if (appState.isHost) {
-        document.getElementById('host-controls').classList.remove('hidden');
-        document.getElementById('host-ai-batch-bar').classList.remove('hidden');
-        document.getElementById('guest-waiting-msg').classList.add('hidden');
-      } else {
-        document.getElementById('host-controls').classList.add('hidden');
-        document.getElementById('host-ai-batch-bar').classList.add('hidden');
-        document.getElementById('guest-waiting-msg').classList.remove('hidden');
-      }
-
-      renderWaitingSeats();
-    }
-
-    function renderWaitingSeats() {
-      const grid = document.getElementById('waiting-seats-grid');
-      if (!grid) return;
-      grid.innerHTML = '';
-
-      appState.seats.forEach((s, idx) => {
-        const isMe = idx === appState.mySeat;
-        const card = document.createElement('div');
-        card.className = `p-2.5 rounded-xl border ${isMe ? 'bg-emerald-950/80 border-amber-400' : 'bg-stone-900/90 border-stone-700'} flex flex-col justify-between`;
-
-        let aiSelectorHTML = '';
-        if (s.isAI) {
-          if (appState.isHost) {
-            aiSelectorHTML = `
-              <select data-ai-seat="${idx}" class="seat-ai-level-select mt-1.5 w-full px-1.5 py-1 rounded bg-stone-800 border border-stone-600 text-[11px] text-amber-200 font-bold focus:outline-none">
-                <option value="feeder" ${s.aiLevel === 'feeder' ? 'selected' : ''}>🎁 放槍王</option>
-                <option value="normal" ${s.aiLevel === 'normal' ? 'selected' : ''}>🙂 普通</option>
-                <option value="god" ${s.aiLevel === 'god' ? 'selected' : ''}>👑 麻將神</option>
-              </select>
-            `;
-          } else {
-            const meta = AI_LEVEL_META[s.aiLevel || 'normal'];
-            aiSelectorHTML = `<span class="mt-1.5 inline-block text-center text-[10px] px-2 py-0.5 rounded font-bold ${meta.badgeCls}">${meta.label}</span>`;
-          }
-        } else {
-          aiSelectorHTML = `<span class="mt-1.5 inline-block text-center text-[10px] px-2 py-0.5 rounded bg-emerald-700/70 text-emerald-100 font-bold">${isMe ? '⭐ 我 (真人)' : '👤 真人玩家'}</span>`;
-        }
-
-        card.innerHTML = `
-          <div>
-            <div class="flex items-center justify-between text-xs mb-1">
-              <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black">${WIND_LABELS[idx]}風位</span>
-              <span class="text-[10px] text-stone-400">${idx === 0 ? '莊家' : '閒家'}</span>
-            </div>
-            <div class="text-xs sm:text-sm font-bold text-white truncate">${s.name}</div>
-          </div>
-          ${aiSelectorHTML}
-        `;
-        grid.appendChild(card);
-      });
-
-      if (appState.isHost) {
-        document.querySelectorAll('.seat-ai-level-select').forEach(sel => {
-          sel.addEventListener('change', (e) => {
-            const seatIdx = parseInt(e.target.dataset.aiSeat, 10);
-            appState.seats[seatIdx].aiLevel = e.target.value;
-            broadcastLobbyState();
-          });
-        });
-      }
-    }
-
-    // 房主一鍵套用所有 AI 性格
-    document.querySelectorAll('.batch-ai-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (!appState.isHost) return;
-        const level = btn.dataset.batchAi;
-        appState.seats.forEach(s => {
-          if (s.isAI) s.aiLevel = level;
-        });
-        renderWaitingSeats();
-        broadcastLobbyState();
-      });
-    });
-
-    // 複製邀請網址按鈕
-    document.getElementById('copy-invite-btn').addEventListener('click', () => {
-      const inviteUrl = getRoomInviteUrl();
-      const tempInput = document.createElement('input');
-      tempInput.value = inviteUrl;
-      document.body.appendChild(tempInput);
-      tempInput.select();
-      document.execCommand('copy');
-      document.body.removeChild(tempInput);
-      showLobbyToast('✅ 已複製專屬邀請網址！可直接貼到 LINE 傳給親友掃碼或點擊加入。');
-    });
-
-    // 離開房間 / 返回大廳
-    function resetAndReturnToLobby() {
-      clearTimeout(appState.aiTimer);
-      clearInterval(appState.turnCountdownInterval);
-      isJoiningRoom = false;
-      const joinBtn = document.getElementById('join-room-btn');
-      if (joinBtn) {
-        joinBtn.disabled = false;
-        joinBtn.classList.remove('opacity-60');
-      }
-      if (appState.peer) {
-        try { appState.peer.destroy(); } catch (e) {}
-        appState.peer = null;
-      }
-      appState.connections = {};
-      appState.hostConn = null;
-      appState.game = null;
-      document.getElementById('game-screen').classList.add('hidden');
-      document.getElementById('round-result-modal').classList.add('hidden');
-      document.getElementById('waiting-room-panel').classList.add('hidden');
-      document.getElementById('lobby-setup-panel').classList.remove('hidden');
-      document.getElementById('lobby-screen').classList.remove('hidden');
-    }
-
-    document.getElementById('leave-room-btn').addEventListener('click', resetAndReturnToLobby);
-    document.getElementById('guest-leave-btn').addEventListener('click', resetAndReturnToLobby);
-    document.getElementById('back-to-lobby-btn').addEventListener('click', resetAndReturnToLobby);
-
-    // 房主開局與下一局按鈕（「AI 補滿空位並立即開局」）
-    document.getElementById('start-game-btn').addEventListener('click', () => {
-      if (!appState.isHost) return;
-      startNewRound(0, 0, 0);
-    });
-
-    document.getElementById('next-round-btn').addEventListener('click', () => {
-      if (!appState.isHost || !appState.game) return;
-      const g = appState.game;
-      const dealerWon = g.lastWinnerSeat === g.dealerSeat;
-      const nextDealer = dealerWon ? g.dealerSeat : (g.dealerSeat + 1) % 4;
-      const nextStreak = dealerWon ? g.streak + 1 : 0;
-      const nextRoundWind = (!dealerWon && nextDealer === 0) ? (g.roundWind + 1) % 4 : g.roundWind;
-      document.getElementById('round-result-modal').classList.add('hidden');
-      startNewRound(nextDealer, nextStreak, nextRoundWind);
-    });
-
-    // 玩家動作統一派發（房主本地執行，訪客送交房主驗證）
-    function sendPlayerAction(action) {
-      if (!appState.game) return;
-      if (appState.isHost) {
-        processPlayerGameAction(appState.mySeat, action);
-      } else if (appState.hostConn && appState.hostConn.open) {
-        appState.hostConn.send({
-          type: 'PLAYER_ACTION',
-          seat: appState.mySeat,
-          action
-        });
-      }
-    }
-
-    // 建立洗好並隨機打亂的牌山
-    function buildShuffledDeck(rule) {
-      const deck = [];
-      for (const s of ['m', 'p', 's']) {
-        for (let n = 1; n <= 9; n++) {
-          for (let c = 0; c < 4; c++) deck.push(`${n}${s}`);
-        }
-      }
-      for (let z = 1; z <= 7; z++) {
-        for (let c = 0; c < 4; c++) deck.push(`${z}z`);
-      }
-      if (rule === 'TW16' || rule === 'GD13') {
-        for (let f = 1; f <= 8; f++) deck.push(`${f}f`);
-      }
-      for (let i = deck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [deck[i], deck[j]] = [deck[j], deck[i]];
-      }
-      return deck;
-    }
-
-    // 補花處理（回傳共補了幾張花）
-    function replaceFlowersForPlayer(player, deck) {
-      let replaced = 0;
-      let hasFlower = true;
-      while (hasFlower && deck.length > 0) {
-        hasFlower = false;
-        for (let i = 0; i < player.hand.length; i++) {
-          if (isFlower(player.hand[i])) {
-            const flowerTile = player.hand.splice(i, 1)[0];
-            player.flowers.push(flowerTile);
-            if (deck.length > 0) {
-              player.hand.push(deck.pop());
-            }
-            replaced++;
-            hasFlower = true;
-            break;
-          }
-        }
-      }
-      return replaced;
-    }
-
-    // 開啟新一局並發牌（確保空缺座位皆由 AI 補滿）
-    function startNewRound(dealerSeat = 0, streak = 0, roundWind = 0) {
-      if (!appState.isHost) return;
-      clearTimeout(appState.aiTimer);
-      clearInterval(appState.turnCountdownInterval);
-
-      const rule = document.getElementById('rule-select').value;
-      const deck = buildShuffledDeck(rule);
-      const baseCount = rule === 'TW16' ? 16 : 13;
-
-      const doraIndicator = rule === 'JP13' ? deck.pop() : null;
-
-      const players = appState.seats.map((s, idx) => {
-        const hand = [];
-        for (let i = 0; i < baseCount; i++) hand.push(deck.pop());
-        if (idx === dealerSeat) hand.push(deck.pop());
-        return {
-          seat: idx,
-          name: s.name,
-          isAI: s.isAI,
-          aiLevel: s.aiLevel || 'normal',
-          score: s.score,
-          hand,
-          melds: [],
-          river: [],
-          flowers: [],
-          isRiichi: false,
-          furiten: false
-        };
-      });
-
-      // 開局自動補花並理牌
-      let totalFlowersReplaced = 0;
-      if (rule === 'TW16' || rule === 'GD13') {
-        players.forEach(p => {
-          totalFlowersReplaced += replaceFlowersForPlayer(p, deck);
-        });
-      }
-      players.forEach((p, idx) => {
-        if (idx === dealerSeat && p.hand.length > 1) {
-          const extra = p.hand.pop();
-          p.hand = [...sortTiles(p.hand), extra];
-        } else {
-          p.hand = sortTiles(p.hand);
-        }
-      });
-
-      appState.selectedTileIndex = null;
-      appState.game = {
-        rule,
-        shuffleMode: appState.shuffleMode,
-        turnTimeoutSec: appState.turnTimeoutSec,
-        deck,
-        players,
-        dealerSeat,
-        streak,
-        roundWind,
-        turnSeat: dealerSeat,
-        phase: 'DISCARD',
-        lastDiscard: null,
-        pendingClaims: {},
-        doraIndicator,
-        totalFlowersReplaced,
-        lastWinnerSeat: dealerSeat,
-        resultData: null
-      };
-
-      const payload = {
-        type: 'GAME_STATE_UPDATE',
-        game: appState.game,
-        soundEvent: null,
-        fxText: null,
-        triggerShuffleAnim: true
-      };
-      Object.values(appState.connections).forEach(c => {
-        if (c.open) c.send(payload);
-      });
-
-      runAnimatedDealSequence(appState.game, true);
-    }
-
-    // 電動／手動洗牌與一手一手「噠噠噠」發牌動畫序列
-    function runAnimatedDealSequence(gameObj, isHostRunner) {
-      enterGameTableUI();
-      appState.isDealingAnim = true;
-      appState.dealHideFlowers = true;
-      appState.dealRevealCounts = [0, 0, 0, 0];
-      renderFullGameTable();
-
-      const overlay = document.getElementById('shuffle-visual-overlay');
-      const box = document.getElementById('shuffle-visual-box');
-      const icon = document.getElementById('shuffle-visual-icon');
-      const title = document.getElementById('shuffle-visual-title');
-      const sub = document.getElementById('shuffle-visual-sub');
-
-      overlay.classList.remove('hidden');
-      if (gameObj.shuffleMode === 'manual') {
-        box.className = 'animate-scramble px-6 py-4 rounded-2xl bg-stone-900/95 border-2 border-amber-400 text-center shadow-2xl';
-        icon.textContent = '👐🎲';
-        title.textContent = '手動搓牌堆砌牌牆・擲骰開門...';
-        sub.textContent = '四家手搓洗牌完畢，準備依序抓牌';
-        sound.playManualShuffle();
-      } else {
-        box.className = 'animate-elevator px-6 py-4 rounded-2xl bg-stone-900/95 border-2 border-emerald-400 text-center shadow-2xl';
-        icon.textContent = '⚡🀄';
-        title.textContent = '電動磁力洗牌升降台升牌中...';
-        sub.textContent = '雙層升降機自動理牌升起';
-        sound.playElectricShuffle();
-      }
-
-      setTimeout(() => {
-        overlay.classList.add('hidden');
-        const targetCounts = gameObj.players.map(p => p.hand.length);
-        let step = 0;
-        const maxRounds = 5;
-
-        const dealTimer = setInterval(() => {
-          const seatIdx = step % 4;
-          const roundIdx = Math.floor(step / 4);
-          if (roundIdx >= maxRounds) {
-            clearInterval(dealTimer);
-            appState.isDealingAnim = false;
-            appState.dealRevealCounts = null;
-            appState.dealHideFlowers = false;
-            renderFullGameTable();
-            if (gameObj.totalFlowersReplaced > 0) {
-              sound.playAction('補花');
-              triggerActionFX('🌸 開局自動補花完成！');
-            }
-            startLocalTurnCountdownUI();
-            if (isHostRunner) scheduleHostAITurn();
-            return;
-          }
-
-          const nextVal = Math.min(targetCounts[seatIdx], appState.dealRevealCounts[seatIdx] + 4);
-          if (nextVal > appState.dealRevealCounts[seatIdx]) {
-            appState.dealRevealCounts[seatIdx] = nextVal;
-            for (let t = 0; t < 4; t++) {
-              setTimeout(() => sound.playDealTick(), t * 35);
-            }
-            renderFullGameTable();
-          }
-          step++;
-        }, 145);
-      }, 850);
-    }
-
-    // 出牌倒數計時器與超時自動打好牌
+// ... existing code ... -->
+    // 出牌倒數計時器與超時自動打好牌（含訪客端主動超時回報 + 房主端強制保底推進，杜絕卡死）
     function startLocalTurnCountdownUI() {
       clearInterval(appState.turnCountdownInterval);
       const g = appState.game;
@@ -2819,9 +2375,15 @@
 
       const totalSec = g.turnTimeoutSec || 12;
       appState.turnDeadlineMs = Date.now() + totalSec * 1000;
+      let localTimeoutFired = false;
 
       const updateTick = () => {
-        const remainMs = Math.max(0, appState.turnDeadlineMs - Date.now());
+        if (!appState.game || appState.game.phase === 'ROUND_OVER') {
+          clearInterval(appState.turnCountdownInterval);
+          return;
+        }
+        const now = Date.now();
+        const remainMs = Math.max(0, appState.turnDeadlineMs - now);
         const remainSec = Math.ceil(remainMs / 1000);
         const pct = Math.max(0, Math.min(100, (remainMs / (totalSec * 1000)) * 100));
 
@@ -2838,36 +2400,83 @@
             : 'h-full bg-emerald-400 transition-all duration-200';
         }
 
-        if (remainMs <= 0) {
-          clearInterval(appState.turnCountdownInterval);
-          if (appState.isHost && appState.game && appState.game.phase !== 'ROUND_OVER') {
-            if (appState.game.phase === 'DISCARD') {
-              const curPlayer = appState.game.players[appState.game.turnSeat];
-              if (!curPlayer.isAI) {
-                const autoTile = curPlayer.isRiichi
-                  ? curPlayer.hand[curPlayer.hand.length - 1]
-                  : chooseSmartDiscard(curPlayer.hand, appState.game.rule, 'god', appState.game);
-                processPlayerGameAction(appState.game.turnSeat, {
-                  type: 'DISCARD',
-                  tile: autoTile,
-                  isAutoTimeout: true
-                });
-              }
-            } else if (appState.game.phase === 'CLAIM') {
-              Object.keys(appState.game.pendingClaims).forEach(s => {
-                const seatNum = Number(s);
-                if (!appState.game.players[seatNum].isAI) {
-                  processPlayerGameAction(seatNum, { type: 'PASS' });
-                }
-              });
-            }
+        // 1. 到點時：無論房主或訪客，若輪到自己出牌或有吃碰槓胡選擇，立即送出超時自動代打 / 跳過
+        if (remainMs <= 0 && !localTimeoutFired) {
+          localTimeoutFired = true;
+          const curGame = appState.game;
+          if (curGame.phase === 'DISCARD' && curGame.turnSeat === appState.mySeat) {
+            const me = curGame.players[appState.mySeat];
+            const autoTile = me.isRiichi
+              ? me.hand[me.hand.length - 1]
+              : chooseSmartDiscard(me.hand, curGame.rule, 'god', curGame);
+            sendPlayerAction({ type: 'DISCARD', tile: autoTile, isAutoTimeout: true });
+          } else if (curGame.phase === 'CLAIM' && curGame.pendingClaims[appState.mySeat]) {
+            sendPlayerAction({ type: 'PASS' });
           }
+        }
+
+        // 2. 房主保底機制：若超過限時 + 1.5 秒仍因訪客斷線/漏封包而卡住，房主強制代為處理並推進牌局！
+        if (appState.isHost && now > appState.turnDeadlineMs + 1500) {
+          clearInterval(appState.turnCountdownInterval);
+          forceAdvanceStuckGame();
         }
       };
 
       updateTick();
       appState.turnCountdownInterval = setInterval(updateTick, 200);
     }
+
+    // 強制解除任何停滯狀態（房主端執行）
+    function forceAdvanceStuckGame() {
+      const g = appState.game;
+      if (!g || g.phase === 'ROUND_OVER' || appState.isDealingAnim) return;
+
+      if (g.phase === 'CLAIM') {
+        const pendingSeats = Object.keys(g.pendingClaims).map(Number);
+        if (pendingSeats.length > 0) {
+          pendingSeats.forEach(s => {
+            delete g.pendingClaims[s];
+          });
+        }
+        advanceToNextDraw((g.lastDiscard.fromSeat + 1) % 4);
+      } else if (g.phase === 'DISCARD') {
+        const curPlayer = g.players[g.turnSeat];
+        const autoTile = curPlayer.isRiichi
+          ? curPlayer.hand[curPlayer.hand.length - 1]
+          : chooseSmartDiscard(curPlayer.hand, g.rule, curPlayer.isAI ? (curPlayer.aiLevel || 'normal') : 'god', g);
+        processPlayerGameAction(g.turnSeat, {
+          type: 'DISCARD',
+          tile: autoTile,
+          isAutoTimeout: !curPlayer.isAI
+        });
+      }
+    }
+
+    // 緊急「⚡ 催牌」按鈕與背景切回自動同步監聽
+    document.getElementById('force-unstick-btn').addEventListener('click', () => {
+      if (!appState.game) return;
+      if (appState.isHost) {
+        triggerActionFX('⚡ 已強制推進牌局');
+        forceAdvanceStuckGame();
+      } else if (appState.hostConn && appState.hostConn.open) {
+        appState.hostConn.send({ type: 'SYNC_REQUEST', seat: appState.mySeat });
+        if (appState.game.phase === 'CLAIM' && appState.game.pendingClaims[appState.mySeat]) {
+          sendPlayerAction({ type: 'PASS' });
+        }
+        const banner = document.getElementById('turn-status-banner');
+        if (banner) banner.textContent = '🔄 已向房主請求同步最新牌局...';
+      }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && appState.game) {
+        if (!appState.isHost && appState.hostConn && appState.hostConn.open) {
+          appState.hostConn.send({ type: 'SYNC_REQUEST', seat: appState.mySeat });
+        } else if (appState.isHost) {
+          scheduleHostAITurn();
+        }
+      }
+    });
 
     function broadcastLobbyState() {
       if (!appState.isHost) return;
