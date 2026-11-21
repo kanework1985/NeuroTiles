@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
@@ -9,78 +9,147 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>線上四人麻將｜GitHub Pages 跨裝置即時對戰版</title>
-  <!-- Tailwind CSS -->
+  <title>線上四人麻將｜GitHub Pages 專用版</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- PeerJS for Serverless WebRTC P2P Multiplayer -->
+  <!-- PeerJS CDN（純前端 WebRTC P2P 點對點連線，免後端伺服器） -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <!-- QRCode.js for Instant Room Invite QR Generation -->
+  <!-- QRCode.js CDN（建立牌桌後即時生成專屬邀請 QR Code） -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- Google Fonts: 完整繁體中文毛筆書法字體 (Yuji Syuku / LXGW WenKai TC / Noto Serif TC) -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=LXGW+WenKai+TC:wght@700&family=Noto+Serif+TC:wght@700;900&family=Yuji+Syuku&display=swap" rel="stylesheet">
+  <!-- 載入完整繁體中文毛筆書法字型，確保「東、南、西、北、中、發、一～九萬」筆觸 100% 統一不退回新細明體 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@700&family=Noto+Serif+TC:wght@700;900&family=Yuji+Syuku&display=swap" rel="stylesheet" />
 
   <style>
     :root {
-      --felt-dark: #0a3622;
-      --felt-mid: #115235;
-      --felt-light: #196b46;
-      --wood-dark: #2c1810;
       --wood-mid: #4a2a18;
-      --gold-accent: #eab308;
-      --tile-ivory: #fdfbf7;
-      --tile-edge: #d6cfc2;
-      --tile-green-back: #15803d;
-      --calligraphy-font: 'Yuji Syuku', 'LXGW WenKai TC', 'BiauKai', 'DFKai-SB', '標楷體', 'Noto Serif TC', serif;
+      --calligraphy-font: 'Yuji Syuku', 'LXGW WenKai TC', 'DFKai-SB', 'BiauKai', '標楷體', 'Noto Serif TC', serif;
     }
 
     * {
       box-sizing: border-box;
-      user-select: none;
-      -webkit-user-select: none;
       -webkit-tap-highlight-color: transparent;
+      user-select: none;
     }
 
-    body {
+    html, body {
       margin: 0;
       padding: 0;
-      font-family: 'Inter', 'Noto Serif TC', 'Microsoft JhengHei', sans-serif;
-      background-color: var(--wood-dark);
-      color: #f8fafc;
-      overflow: hidden;
-      width: 100vw;
+      width: 100%;
       height: 100dvh;
-      padding-top: env(safe-area-inset-top);
-      padding-bottom: env(safe-area-inset-bottom);
-      padding-left: env(safe-area-inset-left);
-      padding-right: env(safe-area-inset-right);
+      overflow: hidden;
+      background-color: #0b1912;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
     }
 
-    /* 手機橫屏矮螢幕自適應優化（避免大廳上下被裁切） */
-    @media (orientation: landscape) and (max-height: 520px) {
+    /* 手機橫屏矮螢幕自適應優化（讓大廳等待室、牌桌、結算視窗在各種手機橫向皆一屏完整顯示） */
+    @media (orientation: landscape) and (max-height: 540px) {
       #lobby-screen {
         justify-content: flex-start !important;
-        padding-top: 8px !important;
-        padding-bottom: 16px !important;
+        padding: 4px 10px !important;
       }
       #lobby-card {
-        padding: 12px 16px !important;
+        padding: 8px 14px !important;
+        max-width: 96vw !important;
       }
-      #lobby-title-sub {
-        display: none;
+      #lobby-title-sub,
+      #lobby-badge-tag {
+        display: none !important;
       }
+      #lobby-main-title {
+        font-size: 1.15rem !important;
+        line-height: 1.3 !important;
+      }
+      #lobby-header-row {
+        margin-bottom: 6px !important;
+      }
+      #lobby-name-row {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        margin-bottom: 6px !important;
+      }
+      #lobby-name-row label {
+        margin-bottom: 0 !important;
+        white-space: nowrap !important;
+      }
+      #player-name-input {
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
+        font-size: 0.85rem !important;
+      }
+      /* 等待室橫向雙欄緊湊排列，免捲動直接看到開局按鈕 */
+      #waiting-room-card {
+        padding: 8px 10px !important;
+        margin-bottom: 0 !important;
+      }
+      #waiting-top-bar {
+        padding-bottom: 6px !important;
+        gap: 8px !important;
+      }
+      #room-qrcode-wrap {
+        padding: 4px !important;
+      }
+      #room-qrcode-box,
+      #room-qrcode-box img,
+      #room-qrcode-box canvas {
+        width: 64px !important;
+        height: 64px !important;
+      }
+      #room-qrcode-label {
+        display: none !important;
+      }
+      #invite-url-preview {
+        display: none !important;
+      }
+      #host-ai-batch-bar {
+        margin-top: 6px !important;
+        padding: 4px 8px !important;
+      }
+      #waiting-seats-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+        gap: 6px !important;
+        margin-top: 6px !important;
+        margin-bottom: 6px !important;
+      }
+      #waiting-seats-grid > div {
+        padding: 6px 8px !important;
+      }
+      #start-game-btn,
+      #leave-room-btn {
+        padding-top: 6px !important;
+        padding-bottom: 6px !important;
+        font-size: 0.85rem !important;
+      }
+      /* 橫向牌桌元素依螢幕高度自適應，避免上下溢出 */
       .hand-tile {
-        width: clamp(28px, 4.4vw, 40px) !important;
-        height: clamp(38px, 6.2vw, 54px) !important;
+        width: clamp(26px, 4.3vw, 38px) !important;
+        height: clamp(35px, 9.2dvh, 50px) !important;
       }
       .river-tile {
-        width: clamp(18px, 2.3vw, 24px) !important;
-        height: clamp(24px, 3.1vw, 33px) !important;
+        width: clamp(17px, 2.2vw, 23px) !important;
+        height: clamp(22px, 5.4dvh, 30px) !important;
+      }
+      #river-top,
+      #river-bottom {
+        height: clamp(46px, 11.5dvh, 62px) !important;
+        width: clamp(180px, 28vw, 250px) !important;
+        margin-top: 2px !important;
+        margin-bottom: 2px !important;
+      }
+      #river-left,
+      #river-right {
+        height: clamp(72px, 19dvh, 96px) !important;
+        width: clamp(72px, 10.5vw, 100px) !important;
       }
       #center-compass {
-        width: 84px !important;
-        height: 84px !important;
+        width: clamp(78px, 19dvh, 96px) !important;
+        height: clamp(78px, 19dvh, 96px) !important;
+        padding: 3px !important;
+      }
+      #bottom-hand-container {
+        min-height: 40px !important;
       }
     }
 
@@ -342,12 +411,12 @@
   <div id="lobby-screen" class="w-full h-full flex flex-col items-center justify-start sm:justify-center p-2.5 sm:p-4 bg-gradient-to-br from-[#1c100b] via-[#0d3b26] to-[#082417] overflow-y-auto">
     <div id="lobby-card" class="w-full max-w-3xl bg-stone-900/95 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-2xl p-3.5 sm:p-7 my-auto">
       <!-- 標題區 + 右上角全螢幕與音效設定鈕 -->
-      <div class="flex items-start justify-between gap-2 mb-3 sm:mb-4">
+      <div id="lobby-header-row" class="flex items-start justify-between gap-2 mb-3 sm:mb-4">
         <div class="text-left">
-          <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-300 text-[11px] sm:text-xs font-semibold mb-1">
+          <div id="lobby-badge-tag" class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-300 text-[11px] sm:text-xs font-semibold mb-1">
             <span>🀄 GitHub Pages 無伺服器純前端 P2P 連線版</span>
           </div>
-          <h1 class="text-xl sm:text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200" style="font-family: 'Noto Serif TC', serif;">
+          <h1 id="lobby-main-title" class="text-xl sm:text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200" style="font-family: 'Noto Serif TC', serif;">
             雀神四人麻將
           </h1>
           <p id="lobby-title-sub" class="text-stone-400 text-xs mt-0.5">台灣16張・日本立直・廣東13張｜語音報牌・自訂音樂・AI性格・雙牌面</p>
@@ -363,7 +432,7 @@
       </div>
 
       <!-- 玩家暱稱 -->
-      <div class="mb-4">
+      <div id="lobby-name-row" class="mb-4">
         <label class="block text-xs font-semibold text-amber-300/90 mb-1">您的玩家暱稱</label>
         <input id="player-name-input" type="text" maxlength="10" placeholder="請輸入暱稱（例如：雀神小王）"
           class="w-full px-4 py-2 rounded-xl bg-stone-800 border border-stone-600 text-white placeholder-stone-500 focus:outline-none focus:border-amber-400 text-sm sm:text-base" />
@@ -433,8 +502,8 @@
 
       <!-- 等待室面板（開房或連線成功後顯示） -->
       <div id="waiting-room-panel" class="hidden">
-        <div class="bg-stone-800/90 border border-amber-400/40 rounded-xl p-4 mb-3">
-          <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-stone-700">
+        <div id="waiting-room-card" class="bg-stone-800/90 border border-amber-400/40 rounded-xl p-4 mb-3">
+          <div id="waiting-top-bar" class="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-stone-700">
             <!-- 左側：房號、邀請網址與一鍵複製按鈕 -->
             <div class="flex-1 w-full text-center sm:text-left">
               <span class="text-xs text-stone-400 block">房間代碼（掃描右側 QR Code 或複製網址快速加入）</span>
@@ -443,22 +512,19 @@
                 <button id="copy-invite-btn" class="px-3 py-1.5 rounded-lg bg-amber-500/25 hover:bg-amber-500/40 border border-amber-400/60 text-amber-200 text-xs font-bold transition shadow">
                   📋 複製邀請網址
                 </button>
-              </div>
-              <div id="invite-url-preview" class="mt-2 px-2.5 py-1.5 rounded-lg bg-stone-950/80 border border-stone-700 text-[11px] font-mono text-emerald-300 truncate select-all">
-                https://...
-              </div>
-              <div class="mt-2 flex items-center justify-center sm:justify-start gap-2">
-                <span class="text-xs text-stone-400">當前玩法：</span>
                 <span id="display-rule-badge" class="inline-block px-2.5 py-0.5 rounded-md bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
                   台灣 16 張麻將
                 </span>
               </div>
+              <div id="invite-url-preview" class="mt-2 px-2.5 py-1.5 rounded-lg bg-stone-950/80 border border-stone-700 text-[11px] font-mono text-emerald-300 truncate select-all">
+                https://...
+              </div>
             </div>
 
             <!-- 右側：專屬邀請 QR Code 卡片 -->
-            <div class="flex flex-col items-center justify-center bg-white p-2.5 rounded-xl shadow-lg border-2 border-amber-400 shrink-0">
+            <div id="room-qrcode-wrap" class="flex flex-col items-center justify-center bg-white p-2.5 rounded-xl shadow-lg border-2 border-amber-400 shrink-0">
               <div id="room-qrcode-box" class="w-[108px] h-[108px] flex items-center justify-center"></div>
-              <span class="text-[10px] font-black text-stone-900 mt-1 tracking-tight">📱 手機掃碼立即入桌</span>
+              <span id="room-qrcode-label" class="text-[10px] font-black text-stone-900 mt-1 tracking-tight">📱 手機掃碼立即入桌</span>
             </div>
           </div>
 
@@ -804,38 +870,42 @@
     </div>
   </div>
 
-  <!-- ==================== 4. 單局結算與台數明細彈窗 ==================== -->
-  <div id="round-result-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="w-full max-w-xl bg-stone-900 border-2 border-amber-400/60 rounded-2xl shadow-2xl p-5 sm:p-6 text-white max-h-[90dvh] overflow-y-auto">
-      <div class="text-center border-b border-stone-700 pb-3 mb-4">
-        <h2 id="result-title" class="text-2xl sm:text-3xl font-black text-amber-400" style="font-family: 'Noto Serif TC', serif;">自摸胡牌！</h2>
-        <p id="result-subtitle" class="text-xs sm:text-sm text-stone-300 mt-1">贏家：玩家一（莊家）</p>
+  <!-- ==================== 4. 單局結算與台數明細彈窗（固定底部確定鍵，無需往下拉） ==================== -->
+  <div id="round-result-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2.5 sm:p-4">
+    <div class="w-full max-w-xl bg-stone-900 border-2 border-amber-400/60 rounded-2xl shadow-2xl text-white max-h-[92dvh] flex flex-col overflow-hidden">
+      <!-- 固定頂部標題 -->
+      <div class="text-center border-b border-stone-700 px-4 py-2.5 sm:py-3.5 shrink-0 bg-stone-900">
+        <h2 id="result-title" class="text-xl sm:text-3xl font-black text-amber-400" style="font-family: 'Noto Serif TC', serif;">自摸胡牌！</h2>
+        <p id="result-subtitle" class="text-xs sm:text-sm text-stone-300 mt-0.5">贏家：玩家一（莊家）</p>
       </div>
 
-      <!-- 胡牌完整牌型展示 -->
-      <div id="result-winning-hand" class="flex flex-wrap items-center justify-center gap-1 bg-emerald-950/60 border border-emerald-600/40 rounded-xl p-3 mb-4">
-      </div>
-
-      <!-- 台數 / 番數明細表 -->
-      <div class="bg-stone-800/80 rounded-xl p-3.5 mb-4 border border-stone-700">
-        <div class="text-xs font-bold text-amber-300 mb-2">役種 / 台數明細</div>
-        <div id="result-fan-list" class="space-y-1.5 text-xs sm:text-sm"></div>
-        <div class="border-t border-stone-600 mt-2.5 pt-2 flex items-center justify-between font-black text-base sm:text-lg text-amber-400">
-          <span>總計</span>
-          <span id="result-total-fan">5 台（+1500 分）</span>
+      <!-- 中間可捲動明細區（螢幕較矮時僅捲動中間內容，底部按鈕永遠保持可見） -->
+      <div class="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+        <!-- 胡牌完整牌型展示 -->
+        <div id="result-winning-hand" class="flex flex-wrap items-center justify-center gap-1 bg-emerald-950/60 border border-emerald-600/40 rounded-xl p-2.5">
         </div>
+
+        <!-- 台數 / 番數明細表 -->
+        <div class="bg-stone-800/80 rounded-xl p-3 border border-stone-700">
+          <div class="text-xs font-bold text-amber-300 mb-1.5">役種 / 台數明細</div>
+          <div id="result-fan-list" class="space-y-1 text-xs sm:text-sm"></div>
+          <div class="border-t border-stone-600 mt-2 pt-1.5 flex items-center justify-between font-black text-base sm:text-lg text-amber-400">
+            <span>總計</span>
+            <span id="result-total-fan">5 台（+1500 分）</span>
+          </div>
+        </div>
+
+        <!-- 四家當前總分排行 -->
+        <div id="result-scoreboard" class="grid grid-cols-4 gap-1.5 sm:gap-2"></div>
       </div>
 
-      <!-- 四家當前總分排行 -->
-      <div id="result-scoreboard" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5"></div>
-
-      <!-- 下一局按鈕 -->
-      <div class="flex justify-center gap-3">
-        <button id="next-round-btn" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-base shadow-lg transition">
-          🀄 再來一局（下一局）
+      <!-- 永遠固定在彈窗最下方的確定 / 再來一局按鈕區 -->
+      <div class="border-t border-stone-700 px-4 py-2.5 sm:py-3.5 bg-stone-950/90 shrink-0">
+        <button id="next-round-btn" class="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 active:scale-[0.99] text-stone-950 font-black text-sm sm:text-base shadow-lg transition">
+          🀄 確定 / 再來一局（下一局）
         </button>
+        <p id="guest-next-round-hint" class="hidden text-center text-xs text-amber-300 font-semibold py-1">⏳ 等待房主點擊「確定 / 再來一局」...</p>
       </div>
-      <p id="guest-next-round-hint" class="hidden text-center text-xs text-stone-400 mt-2">等待房主點擊「再來一局」...</p>
     </div>
   </div>
 
@@ -845,7 +915,7 @@
   <script>
     /**
      * ============================================================================
-     * 線上四人麻將 GitHub Pages 專用版 - 完整升級引擎
+     * 線上四人麻將 GitHub Pages 專用版 - 完整引擎
      * 包含：電動/手動洗牌、桌面與擬真/傳統牌面、語音報牌+音效音量、自訂音樂匯入、
      *       2~20秒限時自動代打、AI三種性格（放槍王 / 普通 / 麻將神）
      * ============================================================================
@@ -873,7 +943,6 @@
     };
     const WIND_LABELS = ['東', '南', '西', '北'];
 
-    // 將牌面代碼轉為語音報牌念法（例如 1m -> "一萬", 5z -> "紅中", 7z -> "白板"）
     function getTileSpeechName(code) {
       if (!code) return '';
       const num = parseInt(code[0], 10);
@@ -895,9 +964,9 @@
     class AudioMediaEngine {
       constructor() {
         this.voiceEnabled = true;
-        this.voiceVolume = 0.85; // 0.0 ~ 1.0
+        this.voiceVolume = 0.85;
         this.bgmEnabled = true;
-        this.bgmVolume = 0.40;   // 0.0 ~ 1.0
+        this.bgmVolume = 0.40;
         this.hasCustomBgm = false;
         this.ctx = null;
         this.synthBgmTimer = null;
@@ -916,7 +985,6 @@
         }
       }
 
-      // 繁體中文語音報牌
       speak(text) {
         if (!this.voiceEnabled || this.voiceVolume <= 0 || !text) return;
         if ('speechSynthesis' in window) {
@@ -928,13 +996,10 @@
             utter.rate = 1.18;
             utter.pitch = 1.05;
             window.speechSynthesis.speak(utter);
-          } catch (e) {
-            // 忽略部分瀏覽器無語音包例外
-          }
+          } catch (e) {}
         }
       }
 
-      // 打牌撞擊桌面聲 + 語音報牌
       playDiscard(tileCode) {
         if (tileCode) this.speak(getTileSpeechName(tileCode));
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
@@ -955,7 +1020,6 @@
         osc.stop(now + 0.08);
       }
 
-      // 電動洗牌機械馬達與磁力理牌聲
       playElectricShuffle() {
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
         this.initContext();
@@ -975,7 +1039,6 @@
         }
       }
 
-      // 手動洗牌（手搓牌浪碰撞與擲骰子聲）
       playManualShuffle() {
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
         this.initContext();
@@ -995,7 +1058,6 @@
         }
       }
 
-      // 發牌清脆推牌聲
       playDealTick() {
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
         this.initContext();
@@ -1014,7 +1076,6 @@
         osc.stop(now + 0.045);
       }
 
-      // 吃 / 碰 / 槓 / 立直 / 補花提示音
       playAction(speechWord) {
         if (speechWord) this.speak(speechWord);
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
@@ -1035,7 +1096,6 @@
         });
       }
 
-      // 胡牌勝利和弦音效
       playWin(speechWord) {
         if (speechWord) this.speak(speechWord);
         if (!this.voiceEnabled || this.voiceVolume <= 0) return;
@@ -1057,7 +1117,6 @@
         });
       }
 
-      // 啟動背景音樂（若有匯入檔案則播檔案，否則播內建東方五聲音階旋律）
       startBgm() {
         if (!this.bgmEnabled || this.bgmVolume <= 0) {
           this.stopBgm();
@@ -1080,7 +1139,6 @@
 
       startSynthBgm() {
         if (this.synthBgmTimer) return;
-        // 柔和東方五聲音階旋律 (C4, D4, E4, G4, A4, C5, A4, G4)
         const pentatonic = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63, 293.66];
         this.synthBgmTimer = setInterval(() => {
           if (!this.bgmEnabled || this.bgmVolume <= 0 || this.hasCustomBgm) return;
@@ -1166,7 +1224,6 @@
     }
 
     function renderDotsSVG(num) {
-      // 1筒：經典大型彩繪同心花紋大餅
       if (num === 1) {
         let petals = '';
         for (let a = 0; a < 360; a += 45) {
@@ -1261,11 +1318,8 @@
 
       return `
         <g ${transformAttr}>
-          <!-- 竹身外框 -->
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${(w * 0.45).toFixed(1)}" fill="${palette.main}" stroke="${palette.dark}" stroke-width="1.2" />
-          <!-- 竹筒高光 -->
           <rect x="${(x + w * 0.24).toFixed(1)}" y="${(y + 2).toFixed(1)}" width="${(w * 0.22).toFixed(1)}" height="${(h - 4).toFixed(1)}" rx="1.5" fill="${palette.light}" opacity="0.7" />
-          <!-- 中央竹節凸起環 -->
           <rect x="${(x - 1.2).toFixed(1)}" y="${(midY - 2.2).toFixed(1)}" width="${(w + 2.4).toFixed(1)}" height="4.4" rx="2" fill="#ffffff" stroke="${palette.dark}" stroke-width="1" />
           <line x1="${x}" y1="${midY}" x2="${x + w}" y2="${midY}" stroke="${palette.main}" stroke-width="1.4" />
         </g>
@@ -1273,30 +1327,22 @@
     }
 
     function renderBambooSVG(num) {
-      // 1條（一索）：經典彩色孔雀／麻雀鳥形插畫
       if (num === 1) {
         return `
           <svg viewBox="0 0 100 136" aria-label="1條">
-            <!-- 尾羽 -->
             <path d="M46 88 L22 122 L38 118 L48 96 Z" fill="#15803d" />
             <path d="M50 88 L45 126 L56 124 L55 94 Z" fill="#dc2626" />
             <path d="M54 88 L64 122 L76 116 L58 92 Z" fill="#1d4ed8" />
-            <!-- 圓潤鳥身 -->
             <ellipse cx="52" cy="68" rx="22" ry="26" fill="#16a34a" stroke="#052e16" stroke-width="2" />
-            <!-- 紅色胸羽 -->
             <path d="M36 56 Q52 48 66 64 Q60 86 42 84 Q32 72 36 56 Z" fill="#ef4444" />
-            <!-- 翅膀層次 -->
             <path d="M48 54 Q74 56 72 80 Q56 84 46 72 Z" fill="#15803d" stroke="#fef08a" stroke-width="1.5" />
             <path d="M52 62 Q68 64 66 76 Q56 78 50 70 Z" fill="#2563eb" />
-            <!-- 鳥頭與冠羽 -->
             <circle cx="44" cy="36" r="13" fill="#15803d" stroke="#052e16" stroke-width="2" />
             <path d="M44 23 Q54 14 62 20 Q54 24 48 27 Z" fill="#dc2626" />
             <path d="M48 26 Q60 20 66 26 Q56 29 50 30 Z" fill="#eab308" />
-            <!-- 鳥喙與眼睛 -->
             <polygon points="32,35 20,39 32,42" fill="#f59e0b" stroke="#78350f" stroke-width="1" />
             <circle cx="41" cy="34" r="3.2" fill="#ffffff" />
             <circle cx="40" cy="34" r="1.7" fill="#0f172a" />
-            <!-- 雙爪 -->
             <path d="M44 92 L40 104 M40 104 L34 106 M40 104 L45 107" stroke="#b45309" stroke-width="2.4" stroke-linecap="round" />
             <path d="M56 92 L58 104 M58 104 L53 107 M58 104 L64 106" stroke="#b45309" stroke-width="2.4" stroke-linecap="round" />
           </svg>
@@ -1344,7 +1390,6 @@
           { x: 68.5, y: 90, w: 12.5, h: 36, c: 'blue' }
         ],
         8: [
-          // 經典八索對稱 M / W 框型
           { x: 16, y: 14, w: 12, h: 46, c: 'green' },
           { x: 34, y: 22, w: 11, h: 36, c: 'green', tilt: -26 },
           { x: 55, y: 22, w: 11, h: 36, c: 'green', tilt: 26 },
@@ -1389,14 +1434,10 @@
               <stop offset="100%" stop-color="#7f1d1d" />
             </linearGradient>
           </defs>
-          <!-- 精緻古典細線內框 -->
           <rect x="8" y="8" width="84" height="120" rx="10" fill="none" stroke="#d97706" stroke-width="1.2" opacity="0.35" />
-          <!-- 上方數字（一～九）毛筆書法 -->
           <text x="50" y="54" text-anchor="middle" font-size="48" class="mj-svg-char"
             fill="url(#wanBlueGrad_${uid})" stroke="#ffffff" stroke-width="2">${cnDigit}</text>
-          <!-- 中間朱紅印章裝飾線 -->
           <line x1="26" y1="65" x2="74" y2="65" stroke="#b91c1c" stroke-width="1.5" opacity="0.4" stroke-linecap="round" />
-          <!-- 下方「萬」字道地繁體毛筆書法 -->
           <text x="51.5" y="117.5" text-anchor="middle" font-size="52" class="mj-svg-char"
             fill="rgba(0,0,0,0.14)">萬</text>
           <text x="50" y="116" text-anchor="middle" font-size="52" class="mj-svg-char"
@@ -1408,7 +1449,6 @@
     // ==================== 東南西北中發白 SVG 書法雕刻繪製器 ====================
     function renderHonorSVG(code) {
       if (code === '7z') {
-        // 白板：經典青花瓷雙線回紋框 + 中心雕花
         return `
           <svg viewBox="0 0 100 136" aria-label="白板">
             <rect x="14" y="16" width="72" height="104" rx="10" fill="none" stroke="#1d4ed8" stroke-width="5" />
@@ -1437,12 +1477,9 @@
               <stop offset="100%" stop-color="${config.botColor}" />
             </linearGradient>
           </defs>
-          <!-- 牌面微雕圓環底紋 -->
           <circle cx="50" cy="68" r="38" fill="none" stroke="${config.ring}" stroke-width="1.5" opacity="0.35" />
-          <!-- 書法大字立體陰影層 -->
           <text x="52" y="94" text-anchor="middle" font-size="76" class="mj-svg-char"
             fill="rgba(0,0,0,0.16)">${config.char}</text>
-          <!-- 書法大字主體（繁體毛筆字體，東/南/西/北/中/發筆觸 100% 統一） -->
           <text x="50" y="92" text-anchor="middle" font-size="76" class="mj-svg-char"
             fill="url(#${gradId})" stroke="#ffffff" stroke-width="2.2">${config.char}</text>
         </svg>
@@ -1468,30 +1505,14 @@
       const num = parseInt(code[0], 10);
       const suit = code[1];
 
-      if (suit === 'm') {
-        // 萬子：使用獨立書法向量 SVG 渲染（一～九萬），徹底取代新細明體
-        return renderWanSVG(num);
-      }
-      if (suit === 'p') {
-        // 筒子：完全以圓形同心圓 SVG 圖形呈現，不顯示任何文字
-        return renderDotsSVG(num);
-      }
-      if (suit === 's') {
-        // 條子：一索為彩色鳥形 SVG、二至九條為竹節圖形 SVG，不顯示任何文字
-        return renderBambooSVG(num);
-      }
-      if (suit === 'z') {
-        // 東南西北中發白：使用書法立體雕刻 SVG 渲染
-        return renderHonorSVG(code);
-      }
-      if (suit === 'f') {
-        // 春夏秋冬梅蘭菊竹：使用花牌專屬圖示 + 書法字 SVG 渲染
-        return renderFlowerSVG(code);
-      }
+      if (suit === 'm') return renderWanSVG(num);
+      if (suit === 'p') return renderDotsSVG(num);
+      if (suit === 's') return renderBambooSVG(num);
+      if (suit === 'z') return renderHonorSVG(code);
+      if (suit === 'f') return renderFlowerSVG(code);
       return code;
     }
 
-    // 渲染花牌區小牌徽章（顯示在各家頭像與牌架旁）
     function renderFlowerMiniBadge(code) {
       const meta = FLOWER_META[code] || { name: FLOWER_NAMES[code], icon: '🌸', color: '#9333ea' };
       return `
@@ -1757,7 +1778,6 @@
     }
 
     // ------------------------- 5. AI 性格決策與超時自動打好牌演算法 -------------------------
-    // aiLevel: 'feeder' (放槍王) | 'normal' (普通) | 'god' (麻將神)
     const AI_LEVEL_META = {
       feeder: { label: '🎁 放槍王', short: '放槍王', badgeCls: 'bg-pink-600/80 text-white' },
       normal: { label: '🙂 普通', short: '普通', badgeCls: 'bg-sky-600/80 text-white' },
@@ -1767,7 +1787,6 @@
     function chooseSmartDiscard(handTiles, rule, aiLevel = 'normal', gameContext = null) {
       if (!handTiles || handTiles.length === 0) return null;
 
-      // 收集場上所有已出現的明牌與出牌河（用於計算安全牌與剩餘張數）
       const visibleCounts = {};
       if (gameContext && gameContext.players) {
         gameContext.players.forEach(p => {
@@ -1776,18 +1795,16 @@
         });
       }
 
-      // 1. 「放槍王」模式：優先打出真人玩家聽牌的牌（直接放槍），或拆掉自己的對子/搭子打出危險生張
       if (aiLevel === 'feeder') {
         if (gameContext && gameContext.players) {
           for (const p of gameContext.players) {
             if (!p.isAI) {
               const humanWaits = getWaitingTiles(p.hand, rule);
               const lethalTile = handTiles.find(t => humanWaits.includes(t));
-              if (lethalTile) return lethalTile; // 直接放槍給真人玩家！
+              if (lethalTile) return lethalTile;
             }
           }
         }
-        // 若真人尚未聽牌，優先拆掉中張生張（場上完全沒出現過的 3~7 牌）
         const dangerous = handTiles.find(t => {
           const n = parseInt(t[0], 10);
           return !t.endsWith('z') && n >= 3 && n <= 7 && (visibleCounts[t] || 0) === 0;
@@ -1796,7 +1813,6 @@
         return handTiles[0];
       }
 
-      // 2. 評估打出哪張牌可以「聽牌」（且計算聽牌總剩餘張數）
       let bestTenpaiTile = null;
       let bestTenpaiScore = -1;
 
@@ -1805,7 +1821,6 @@
         const rest = handTiles.filter((_, idx) => idx !== i);
         const waits = getWaitingTiles(rest, rule);
         if (waits.length > 0) {
-          // 麻將神會精算每張聽牌在牌牆中的實際剩餘枚數
           const liveOuts = waits.reduce((sum, w) => sum + Math.max(0, 4 - (visibleCounts[w] || 0)), 0);
           const score = aiLevel === 'god' ? liveOuts * 10 + waits.length : waits.length;
           if (score > bestTenpaiScore) {
@@ -1816,7 +1831,6 @@
       }
       if (bestTenpaiTile) return bestTenpaiTile;
 
-      // 3. 計算每張牌的保留價值（順子潛力、刻子對子、以及「麻將神」的安全牌防放槍加權）
       const counts = {};
       handTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
 
@@ -1842,12 +1856,11 @@
           if (num >= 3 && num <= 7) score += 2;
         }
 
-        // 「麻將神」與「超時自動打好牌」：若該牌已在牌河出現過多次（熟張/現物），降低其保留分（優先安全打出）
         if (aiLevel === 'god') {
           const seen = visibleCounts[tile] || 0;
-          if (seen >= 2) score -= 3.5; // 熟張安全牌優先捨棄
+          if (seen >= 2) score -= 3.5;
           else if (seen === 0 && !tile.endsWith('z') && num >= 3 && num <= 7) {
-            score += 3.0; // 中張生張容易放槍，扣留不輕易打出
+            score += 3.0;
           }
         }
 
@@ -1870,13 +1883,11 @@
       connections: {},
       hostConn: null,
 
-      // 房主設定參數
-      shuffleMode: 'electric', // 'electric' (電動洗牌) | 'manual' (手動洗牌)
-      turnTimeoutSec: 12,      // 2 ~ 20 秒
-      tableTheme: 'emerald',   // 'emerald' | 'blue' | 'tatami' | 'walnut'
-      tileStyle: 'realistic',  // 'realistic' | 'traditional'
+      shuffleMode: 'electric',
+      turnTimeoutSec: 12,
+      tableTheme: 'emerald',
+      tileStyle: 'realistic',
 
-      // 房間玩家清單 (4席)
       seats: [
         { seat: 0, name: '房主', isAI: false, aiLevel: 'normal', peerId: '', score: 10000 },
         { seat: 1, name: 'AI 電腦 (南)', isAI: true, aiLevel: 'normal', peerId: '', score: 10000 },
@@ -1919,7 +1930,6 @@
       document.getElementById('rule-desc-box').textContent = RULE_DESCRIPTIONS[e.target.value];
     });
 
-    // 大廳洗牌方式與出牌秒數滑桿同步
     document.getElementById('shuffle-mode-select').addEventListener('change', (e) => {
       appState.shuffleMode = e.target.value;
       syncSettingsUI();
@@ -1933,7 +1943,6 @@
       document.getElementById('modal-timeout-label').textContent = `${val} 秒`;
     });
 
-    // 載入儲存的偏好與網址邀請房號
     window.addEventListener('DOMContentLoaded', () => {
       const savedName = localStorage.getItem('mj_player_name');
       if (savedName) document.getElementById('player-name-input').value = savedName;
@@ -1947,7 +1956,7 @@
       syncSettingsUI();
     });
 
-    // ------------------------- 7. 設定抽屜 UI 控制（主題 / 牌面 / 語音 / 音樂 / 限時） -------------------------
+    // ------------------------- 7. 設定抽屜 UI 控制 -------------------------
     function toggleFullScreenMode() {
       const docEl = document.documentElement;
       const isFull = document.fullscreenElement || document.webkitFullscreenElement;
@@ -1990,7 +1999,6 @@
       document.getElementById('settings-modal').classList.add('hidden');
     });
 
-    // 桌面樣式切換
     document.querySelectorAll('.theme-choice-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         appState.tableTheme = btn.dataset.theme;
@@ -1999,7 +2007,6 @@
       });
     });
 
-    // 牌面風格切換（擬真 vs 傳統）
     document.getElementById('tile-style-realistic-btn').addEventListener('click', () => {
       appState.tileStyle = 'realistic';
       applyTableThemeAndTileStyle();
@@ -2020,7 +2027,6 @@
       document.body.classList.add(`style-${appState.tileStyle}`);
     }
 
-    // 語音與音效音量 / 靜音控制
     document.getElementById('voice-volume-slider').addEventListener('input', (e) => {
       const pct = parseInt(e.target.value, 10);
       sound.voiceVolume = pct / 100;
@@ -2040,7 +2046,6 @@
       sound.playWin('發財！自摸胡牌！');
     });
 
-    // 背景音樂匯入、音量與靜音控制
     document.getElementById('bgm-volume-slider').addEventListener('input', (e) => {
       const pct = parseInt(e.target.value, 10);
       sound.bgmVolume = pct / 100;
@@ -2077,7 +2082,6 @@
       syncSettingsUI();
     });
 
-    // 設定彈窗內的洗牌方式與出牌秒數同步
     document.getElementById('modal-shuffle-electric').addEventListener('click', () => {
       if (!appState.isHost && appState.game) return;
       appState.shuffleMode = 'electric';
@@ -2107,7 +2111,6 @@
     });
 
     function syncSettingsUI() {
-      // 主題高亮
       document.querySelectorAll('.theme-choice-btn').forEach(btn => {
         if (btn.dataset.theme === appState.tableTheme) {
           btn.classList.add('border-2', 'border-amber-400');
@@ -2118,7 +2121,6 @@
         }
       });
 
-      // 牌面風格高亮
       const realBtn = document.getElementById('tile-style-realistic-btn');
       const tradBtn = document.getElementById('tile-style-traditional-btn');
       if (appState.tileStyle === 'realistic') {
@@ -2129,7 +2131,6 @@
         realBtn.className = 'p-2.5 rounded-xl border border-stone-600 bg-stone-900 text-left transition';
       }
 
-      // 語音音效狀態
       const vPct = Math.round(sound.voiceVolume * 100);
       document.getElementById('voice-volume-slider').value = vPct;
       document.getElementById('voice-volume-label').textContent = `${vPct}%`;
@@ -2140,7 +2141,6 @@
         : 'px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold';
       document.getElementById('quick-voice-btn').textContent = vMuted ? '🔇 語音關' : '🗣️ 語音開';
 
-      // 音樂狀態
       const bPct = Math.round(sound.bgmVolume * 100);
       document.getElementById('bgm-volume-slider').value = bPct;
       document.getElementById('bgm-volume-label').textContent = `${bPct}%`;
@@ -2151,7 +2151,6 @@
         : 'px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold';
       document.getElementById('quick-bgm-btn').textContent = bMuted ? '🔇 音樂關' : '🎵 音樂開';
 
-      // 洗牌與限時
       const elBtn = document.getElementById('modal-shuffle-electric');
       const mnBtn = document.getElementById('modal-shuffle-manual');
       if (appState.shuffleMode === 'electric') {
@@ -2173,7 +2172,6 @@
       return name;
     }
 
-    // 房主開房
     document.getElementById('create-room-btn').addEventListener('click', () => {
       sound.initContext();
       sound.startBgm();
@@ -2194,7 +2192,6 @@
         ];
       };
 
-      // 偵測是否在受限的預覽沙盒環境，或 PeerJS 無法使用 WebSocket
       const isRestrictedSandbox = window.location.protocol === 'about:' || window.location.protocol === 'blob:' || typeof Peer === 'undefined';
       if (isRestrictedSandbox) {
         setupLocalHostSeats('LOCAL_OFFLINE_HOST');
@@ -2249,7 +2246,6 @@
       });
 
       peer.on('error', (err) => {
-        // 若因預覽沙盒 (SecurityError / network) 無法連上外部信令伺服器，自動無縫降級為本機 AI 模式
         if (!appState.myPeerId) {
           try { peer.destroy(); } catch (e) {}
           appState.peer = null;
@@ -2262,7 +2258,6 @@
       });
     });
 
-    // 訪客加入房間（防止連點重複加入）
     let isJoiningRoom = false;
     document.getElementById('join-room-btn').addEventListener('click', () => {
       if (isJoiningRoom) return;
@@ -2327,7 +2322,6 @@
             isJoiningRoom = false;
             joinBtn.disabled = false;
             joinBtn.classList.remove('opacity-60');
-            // 若在對戰中短暫斷線，嘗試自動重連回原房間而非直接踢回大廳
             if (appState.game) {
               const banner = document.getElementById('turn-status-banner');
               if (banner) banner.textContent = '🔄 網路瞬斷，正在自動重新連線至牌桌...';
@@ -2354,7 +2348,6 @@
       });
     });
 
-    // 進入等待室 UI（生成專屬邀請網址與 QR Code）
     function enterWaitingRoomUI() {
       document.getElementById('lobby-setup-panel').classList.add('hidden');
       document.getElementById('waiting-room-panel').classList.remove('hidden');
@@ -2368,7 +2361,6 @@
       const curRule = document.getElementById('rule-select').value;
       document.getElementById('display-rule-badge').textContent = ruleMap[curRule] || curRule;
 
-      // 產生專屬邀請網址與 QR Code
       const baseUrl = window.location.href.split('?')[0];
       const inviteUrl = `${baseUrl}?room=${appState.roomCode}`;
       document.getElementById('invite-url-preview').textContent = inviteUrl;
@@ -2402,7 +2394,6 @@
       renderWaitingSeats();
     }
 
-    // 渲染等待室四個座位與 AI 性格選單
     function renderWaitingSeats() {
       const grid = document.getElementById('waiting-seats-grid');
       if (!grid) return;
@@ -2454,7 +2445,6 @@
       }
     }
 
-    // 房主處理訪客連線封包（去重防護，避免手機加入佔用兩個名額）
     function handleHostReceiveData(conn, msg) {
       if (!msg || !msg.type) return;
 
@@ -2503,7 +2493,6 @@
       }
     }
 
-    // 訪客處理來自房主的封包
     function handleGuestReceiveData(msg) {
       if (!msg || !msg.type) return;
 
@@ -2551,7 +2540,6 @@
       }
     }
 
-    // 統一發送玩家動作（房主直接處理，訪客透過 PeerJS 傳給房主）
     function sendPlayerAction(action) {
       if (!appState.game) return;
       if (appState.isHost) {
@@ -2647,17 +2635,14 @@
         furiten: false
       }));
 
-      // 發起手牌
       for (let i = 0; i < handSize; i++) {
         for (let s = 0; s < 4; s++) {
           players[s].hand.push(deck.pop());
         }
       }
 
-      // 莊家多摸第 17 / 14 張進牌
       players[dealerSeat].hand.push(deck.pop());
 
-      // 開局自動補花並理牌
       let anyInitialFlower = false;
       players.forEach(p => {
         if (rule === 'TW16' || rule === 'GD13') {
@@ -2692,7 +2677,6 @@
       appState.selectedTileIndex = null;
       enterGameTableUI();
 
-      // 廣播開局與動畫訊號給所有訪客
       Object.values(appState.connections).forEach(c => {
         if (c.open) {
           c.send({
@@ -2708,7 +2692,6 @@
       runAnimatedDealSequence(true);
     }
 
-    // 洗牌升牌 + 一手一手「噠噠噠」發牌動畫
     function runAnimatedDealSequence(isHostCaller) {
       const g = appState.game;
       if (!g) return;
@@ -2749,7 +2732,6 @@
           for (let s = 0; s < 4; s++) {
             const maxLen = g.players[s].hand.length;
             appState.dealRevealCounts[s] = Math.min(maxLen, roundIdx * 4);
-            // 每手發出 4 聲清脆「噠噠噠噠」碰撞音
             for (let k = 0; k < 4; k++) {
               setTimeout(() => sound.playDealTick(), k * 35 + s * 45);
             }
@@ -2911,7 +2893,6 @@
             : 'h-full bg-emerald-400 transition-all duration-200';
         }
 
-        // 時間到：自動幫打好牌或自動跳過吃碰槓（防卡死核心）
         if (remainMs <= 0 && !autoTriggered) {
           autoTriggered = true;
           clearInterval(appState.turnCountdownInterval);
@@ -2927,7 +2908,6 @@
       const g = appState.game;
       if (!g || g.phase === 'ROUND_OVER') return;
 
-      // 1. 若自己正在出牌階段且超時 -> 自動打好牌
       if (g.phase === 'DISCARD' && g.turnSeat === appState.mySeat) {
         const me = g.players[appState.mySeat];
         const tile = me.isRiichi
@@ -2938,13 +2918,11 @@
         return;
       }
 
-      // 2. 若自己有吃/碰/槓/胡選單且超時 -> 主動發送 PASS
       if (g.phase === 'CLAIM' && g.pendingClaims[appState.mySeat]) {
         sendPlayerAction({ type: 'PASS' });
         return;
       }
 
-      // 3. 若我是房主，但其他座位超時未回應 -> 房主強制代為處理推進，避免整桌卡死
       if (appState.isHost) {
         forceAdvanceStalledGame();
       }
@@ -2981,7 +2959,6 @@
       forceAdvanceStalledGame();
     });
 
-    // 看門狗定時偵測：若房主端超過限時 + 2 秒仍未推進，自動執行防卡死救援
     setInterval(() => {
       if (!appState.isHost || !appState.game || appState.game.phase === 'ROUND_OVER' || appState.isDealingAnim) return;
       if (appState.turnDeadlineMs > 0 && Date.now() - appState.turnDeadlineMs > 2000) {
@@ -3010,7 +2987,6 @@
         const p = g.players[s];
         const acts = [];
 
-        // 胡牌檢測（日本麻將振聽時不可榮和）
         const canRon = !(g.rule === 'JP13' && p.furiten);
         if (canRon && canWinStandard([...p.hand, tile], g.rule)) {
           acts.push('hu');
@@ -3064,7 +3040,6 @@
         return;
       }
 
-      // 振聽狀態更新（日本立直）
       if (g.rule === 'JP13') {
         const waits = getWaitingTiles(player.hand.slice(0, -1), 'JP13');
         player.furiten = waits.some(w => player.river.includes(w));
@@ -3135,7 +3110,6 @@
       const player = g.players[seat];
       if (!player) return;
 
-      // 1. 出牌階段動作
       if (g.phase === 'DISCARD' && g.turnSeat === seat) {
         if (action.type === 'SELF_WIN') {
           if (canWinStandard(player.hand, g.rule)) {
@@ -3222,7 +3196,6 @@
         return;
       }
 
-      // 2. 吃 / 碰 / 槓 / 胡 搶牌階段動作
       if (g.phase === 'CLAIM' && g.pendingClaims[seat]) {
         const allowed = g.pendingClaims[seat];
         const discardObj = g.lastDiscard;
@@ -3271,7 +3244,6 @@
         }
 
         if (action.type === 'CLAIM_PON' && allowed.includes('pon')) {
-          // 若有其他家可胡牌，先等待胡牌優先
           const othersCanHu = Object.entries(g.pendingClaims).some(([s, acts]) => parseInt(s, 10) !== seat && acts.includes('hu'));
           if (othersCanHu) return;
 
@@ -3324,7 +3296,6 @@
       clearTimeout(appState.aiTimer);
       const g = appState.game;
 
-      // 情況 A：搶牌階段 (CLAIM) 中有 AI 待決定
       if (g.phase === 'CLAIM') {
         const aiClaimSeats = Object.keys(g.pendingClaims)
           .map(s => parseInt(s, 10))
@@ -3337,7 +3308,6 @@
               const aiLevel = g.players[s].aiLevel || 'normal';
               if (!acts) continue;
 
-              // 「放槍王」故意不胡牌（60%放過胡牌機會）且喜歡亂吃亂碰破壞手牌
               if (acts.includes('hu')) {
                 if (aiLevel === 'feeder' && Math.random() < 0.6) {
                   processPlayerGameAction(s, { type: 'PASS' });
@@ -3374,26 +3344,22 @@
         return;
       }
 
-      // 情況 B：輪到某位 AI 出牌
       if (g.phase === 'DISCARD') {
         const currentPlayer = g.players[g.turnSeat];
         if (currentPlayer.isAI) {
           const aiLevel = currentPlayer.aiLevel || 'normal';
           appState.aiTimer = setTimeout(() => {
-            // 1. 自摸檢查（「放槍王」有 50% 機率裝作沒看到自摸，繼續打牌送幸福）
             if (canWinStandard(currentPlayer.hand, g.rule)) {
               if (!(aiLevel === 'feeder' && Math.random() < 0.5)) {
                 processPlayerGameAction(g.turnSeat, { type: 'SELF_WIN' });
                 return;
               }
             }
-            // 2. 若已立直，打出最後摸到的牌
             if (currentPlayer.isRiichi) {
               const lastDrawn = currentPlayer.hand[currentPlayer.hand.length - 1];
               processPlayerGameAction(g.turnSeat, { type: 'DISCARD', tile: lastDrawn });
               return;
             }
-            // 3. 依據 AI 性格挑選捨牌
             const chosen = chooseSmartDiscard(currentPlayer.hand, g.rule, aiLevel, g);
 
             const rest = [...currentPlayer.hand];
@@ -3492,7 +3458,6 @@
       document.getElementById(`${pos}-name`).textContent = player.name;
       document.getElementById(`${pos}-score`).textContent = `${player.score}`;
 
-      // 渲染對家／左右家專屬花牌區
       const flowersBox = document.getElementById(`${pos}-flowers`);
       if (appState.dealHideFlowers || player.flowers.length === 0) {
         flowersBox.innerHTML = '';
@@ -3500,7 +3465,6 @@
         flowersBox.innerHTML = player.flowers.map(f => renderFlowerMiniBadge(f)).join('');
       }
 
-      // 顯示 AI 性格徽章（放槍王 / 普通 / 麻將神）
       const aiBadge = document.getElementById(`${pos}-ai-badge`);
       if (player.isAI) {
         const meta = AI_LEVEL_META[player.aiLevel || 'normal'];
