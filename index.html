@@ -1,0 +1,3713 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>線上四人麻將｜GitHub Pages 跨裝置即時對戰版</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PeerJS for Serverless WebRTC P2P Multiplayer -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Google Fonts: 繁中楷書/行書書法字體 + Noto Serif TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Klee+One:wght@600&family=Ma+Shan+Zheng&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --felt-dark: #0a3622;
+      --felt-mid: #115235;
+      --felt-light: #196b46;
+      --wood-dark: #2c1810;
+      --wood-mid: #4a2a18;
+      --gold-accent: #eab308;
+      --tile-ivory: #fdfbf7;
+      --tile-edge: #d6cfc2;
+      --tile-green-back: #15803d;
+      --calligraphy-font: 'Ma Shan Zheng', 'Klee One', 'BiauKai', 'DFKai-SB', '標楷體', 'Noto Serif TC', serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', 'Noto Serif TC', 'Microsoft JhengHei', sans-serif;
+      background-color: var(--wood-dark);
+      color: #f8fafc;
+      overflow: hidden;
+      width: 100vw;
+      height: 100dvh;
+    }
+
+    /* 牌桌布面主題樣式 */
+    .mahjong-table {
+      box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.78);
+      border: 6px solid var(--wood-mid);
+      position: relative;
+      transition: background 0.35s ease, border-color 0.35s ease;
+    }
+
+    .mahjong-table.theme-emerald {
+      background: radial-gradient(circle at center, #196b46 0%, #115235 55%, #0a3622 100%);
+      border-color: #4a2a18;
+    }
+
+    .mahjong-table.theme-blue {
+      background: radial-gradient(circle at center, #1e40af 0%, #1e3a8a 55%, #0f172a 100%);
+      border-color: #334155;
+    }
+
+    .mahjong-table.theme-tatami {
+      background:
+        repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 2px, transparent 2px, transparent 6px),
+        radial-gradient(circle at center, #8c7a3e 0%, #6b5c2b 60%, #483d19 100%);
+      border-color: #3f2e1d;
+    }
+
+    .mahjong-table.theme-walnut {
+      background:
+        repeating-linear-gradient(0deg, rgba(0,0,0,0.08) 0px, rgba(0,0,0,0.08) 3px, transparent 3px, transparent 10px),
+        radial-gradient(circle at center, #5c3a21 0%, #432815 60%, #27150a 100%);
+      border-color: #1f1108;
+    }
+
+    @media (min-width: 768px) {
+      .mahjong-table {
+        border-width: 12px;
+        border-radius: 16px;
+      }
+    }
+
+    /* ==================== 牌面風格 1：擬真 3D 立體牌面 ==================== */
+    .style-realistic .mj-tile {
+      background: linear-gradient(175deg, #ffffff 0%, #fbf8f1 75%, #e5dec9 100%);
+      border: 1px solid #cbd5e1;
+      border-bottom: 5px solid #15803d;
+      border-right: 2.5px solid #cbd5e1;
+      border-radius: 7px;
+      box-shadow: 0 4px 7px rgba(0, 0, 0, 0.42), inset 0 1.5px 1px rgba(255, 255, 255, 0.95);
+    }
+
+    .style-realistic .river-tile {
+      border-bottom-width: 3px;
+      border-right-width: 1.5px;
+      border-radius: 4px;
+    }
+
+    /* ==================== 牌面風格 2：傳統高對比平面大字牌面 ==================== */
+    .style-traditional .mj-tile {
+      background: #fffdf5;
+      border: 2px solid #1e293b;
+      border-bottom: 4px solid #334155;
+      border-radius: 5px;
+      box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
+    }
+
+    .style-traditional .river-tile {
+      border-width: 1.5px;
+      border-bottom-width: 2.5px;
+      border-radius: 3px;
+    }
+
+    .style-traditional .mj-tile span {
+      transform: scale(1.12);
+      text-shadow: none !important;
+    }
+
+    .style-traditional .mj-tile svg {
+      filter: contrast(1.22) saturate(1.18);
+    }
+
+    /* SVG 書法字雕刻樣式 */
+    .mj-svg-char {
+      font-family: var(--calligraphy-font);
+      font-weight: 900;
+      paint-order: stroke fill;
+    }
+
+    /* 通用麻將牌排版 */
+    .mj-tile {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.14s ease;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 2px;
+    }
+
+    .mj-tile svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+
+    /* 自家手牌尺寸：橫式與直式自適應 */
+    .hand-tile {
+      width: clamp(34px, 5.2vw, 54px);
+      height: clamp(48px, 7.4vw, 76px);
+    }
+
+    /* 直式手機模式下的手牌優化（雙排交錯大按鈕） */
+    @media (orientation: portrait) and (max-width: 767px) {
+      .hand-tile {
+        width: clamp(36px, 10.2vw, 46px);
+        height: clamp(50px, 14vw, 64px);
+      }
+    }
+
+    .hand-tile:hover {
+      transform: translateY(-6px);
+    }
+
+    .hand-tile.selected {
+      transform: translateY(-14px) scale(1.04);
+      box-shadow: 0 10px 18px rgba(234, 179, 8, 0.6), 0 0 0 2.5px #eab308;
+      z-index: 20;
+    }
+
+    .hand-tile.drawn-gap {
+      margin-left: 8px;
+    }
+
+    @media (orientation: portrait) and (max-width: 767px) {
+      .hand-tile.drawn-gap {
+        margin-left: 4px;
+      }
+    }
+
+    /* 出牌河與明牌小尺寸 */
+    .river-tile {
+      width: clamp(22px, 2.8vw, 32px);
+      height: clamp(30px, 3.8vw, 44px);
+      cursor: default;
+    }
+
+    @media (orientation: portrait) and (max-width: 767px) {
+      .river-tile {
+        width: 21px;
+        height: 29px;
+      }
+    }
+
+    .river-tile.latest-discard {
+      box-shadow: 0 0 0 2px #facc15, 0 0 12px rgba(250, 204, 21, 0.9);
+      animation: pulseGold 1.4s infinite;
+    }
+
+    @keyframes pulseGold {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.07); }
+    }
+
+    /* 麻將牌背 */
+    .tile-back-top {
+      width: clamp(18px, 2.3vw, 28px);
+      height: clamp(26px, 3.2vw, 38px);
+      background: linear-gradient(135deg, #16a34a 0%, #14532d 100%);
+      border: 1px solid #dcfce7;
+      border-bottom: 3px solid #f8fafc;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+
+    .tile-back-side {
+      width: clamp(22px, 2.6vw, 32px);
+      height: clamp(14px, 1.8vw, 20px);
+      background: linear-gradient(135deg, #16a34a 0%, #14532d 100%);
+      border: 1px solid #dcfce7;
+      border-right: 3px solid #f8fafc;
+      border-radius: 3px;
+      box-shadow: 0 2px 3px rgba(0,0,0,0.4);
+    }
+
+    /* 牌面文字配色（強制使用楷書/書法字型，徹底取代新細明體） */
+    .suit-wan { color: #b91c1c; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-tong { color: #1d4ed8; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-tiao { color: #15803d; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-wind { color: #1e293b; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-zhong { color: #dc2626; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-fa { color: #15803d; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-bai { color: #1e40af; font-family: var(--calligraphy-font); font-weight: 900; }
+    .suit-flower { color: #9333ea; font-family: var(--calligraphy-font); font-weight: 900; }
+
+    /* 動作提示特效 */
+    .action-banner {
+      animation: popAction 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    @keyframes popAction {
+      0% { transform: scale(0.4); opacity: 0; }
+      45% { transform: scale(1.16); opacity: 1; }
+      85% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0; }
+    }
+
+    /* 電動洗牌升降機動畫 */
+    @keyframes elevatorRise {
+      0% { transform: translateY(28px) scale(0.9); opacity: 0; }
+      60% { transform: translateY(-4px) scale(1.02); opacity: 1; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .animate-elevator {
+      animation: elevatorRise 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    /* 手動洗牌手搓震動動畫 */
+    @keyframes handScramble {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); }
+      25% { transform: translate(-5px, 3px) rotate(-3deg); }
+      50% { transform: translate(5px, -3px) rotate(3deg); }
+      75% { transform: translate(-3px, -2px) rotate(-2deg); }
+    }
+    .animate-scramble {
+      animation: handScramble 0.25s infinite;
+    }
+
+    /* 發牌飛入牌架動畫 */
+    @keyframes dealSlideIn {
+      0% { transform: translateY(-26px) scale(0.75); opacity: 0; }
+      100% { transform: translateY(0) scale(1); opacity: 1; }
+    }
+    .animate-deal-tile {
+      animation: dealSlideIn 0.22s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    /* 補花閃耀彈跳動畫 */
+    @keyframes flowerPop {
+      0% { transform: scale(0.4) rotate(-12deg); opacity: 0; }
+      65% { transform: scale(1.18) rotate(4deg); opacity: 1; }
+      100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    }
+    .animate-flower-pop {
+      animation: flowerPop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+
+    /* 自訂捲軸隱藏 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="flex items-center justify-center style-realistic">
+
+  <!-- ==================== 1. 大廳與連線設定畫面 ==================== -->
+  <div id="lobby-screen" class="w-full h-full flex flex-col items-center justify-center p-3 sm:p-4 bg-gradient-to-br from-[#1c100b] via-[#0d3b26] to-[#082417] overflow-y-auto">
+    <div class="w-full max-w-3xl bg-stone-900/95 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-2xl p-4 sm:p-7 my-auto">
+      <!-- 標題區 + 右上角快速音效設定鈕 -->
+      <div class="flex items-start justify-between gap-2 mb-4">
+        <div class="text-left">
+          <div class="inline-flex items-center gap-2 px-3 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/30 text-amber-300 text-xs font-semibold mb-1.5">
+            <span>🀄 GitHub Pages 無伺服器純前端 P2P 連線版</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200" style="font-family: 'Noto Serif TC', serif;">
+            雀神四人麻將
+          </h1>
+          <p class="text-stone-400 text-xs mt-0.5">台灣16張・日本立直・廣東13張｜語音報牌・自訂音樂・AI性格・雙牌面</p>
+        </div>
+        <button id="lobby-open-settings-btn" class="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 border border-amber-400/40 text-amber-200 text-xs sm:text-sm font-bold shadow flex items-center gap-1.5 shrink-0 transition">
+          <span>⚙️ 牌桌與音效設定</span>
+        </button>
+      </div>
+
+      <!-- 玩家暱稱 -->
+      <div class="mb-4">
+        <label class="block text-xs font-semibold text-amber-300/90 mb-1">您的玩家暱稱</label>
+        <input id="player-name-input" type="text" maxlength="10" placeholder="請輸入暱稱（例如：雀神小王）"
+          class="w-full px-4 py-2 rounded-xl bg-stone-800 border border-stone-600 text-white placeholder-stone-500 focus:outline-none focus:border-amber-400 text-sm sm:text-base" />
+      </div>
+
+      <!-- 模式切換頁籤：建立房間 / 加入房間 -->
+      <div id="lobby-setup-panel">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- 左側：建立新牌局 -->
+          <div class="bg-stone-800/85 border border-emerald-600/40 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <h2 class="text-base sm:text-lg font-bold text-emerald-300 mb-2.5 flex items-center gap-2">
+                <span>🏠 開設新牌桌（當房主）</span>
+              </h2>
+
+              <label class="block text-xs text-stone-300 mb-1">1. 選擇麻將玩法規則</label>
+              <select id="rule-select" class="w-full px-3 py-2 rounded-lg bg-stone-900 border border-stone-600 text-amber-200 text-sm font-semibold focus:outline-none focus:border-amber-400 mb-2.5">
+                <option value="TW16" selected>🇹🇼 台灣 16 張麻將（預設・含8張花牌補花）</option>
+                <option value="JP13">🇯🇵 日本立直麻將（13 張・無花牌・立直/寶牌）</option>
+                <option value="GD13">🇭🇰 廣東 13 張麻將（13 張・含花牌補花/經典番數）</option>
+              </select>
+
+              <!-- 洗牌方式與出牌秒數快速設定 -->
+              <div class="grid grid-cols-2 gap-2 mb-2.5">
+                <div>
+                  <label class="block text-[11px] text-stone-300 mb-1">2. 洗牌方式</label>
+                  <select id="shuffle-mode-select" class="w-full px-2.5 py-2 rounded-lg bg-stone-900 border border-stone-600 text-emerald-200 text-xs font-bold focus:outline-none focus:border-amber-400">
+                    <option value="electric" selected>⚡ 電動洗牌法</option>
+                    <option value="manual">👐 手動洗牌風</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[11px] text-stone-300 mb-1">3. 出牌限時 (<span id="lobby-timeout-val" class="text-amber-300 font-bold">12</span>秒)</label>
+                  <input id="lobby-timeout-range" type="range" min="2" max="20" value="12"
+                    class="w-full accent-amber-400 cursor-pointer mt-1.5" />
+                </div>
+              </div>
+
+              <div id="rule-desc-box" class="text-[11px] text-stone-400 bg-stone-900/70 p-2 rounded-lg border border-stone-700/70 leading-relaxed mb-3">
+                起手 16 張、進牌 17 張，含春夏秋冬梅蘭菊竹花牌自動補花。超時未出牌自動由系統幫打好牌。
+              </div>
+            </div>
+            <button id="create-room-btn" class="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-[0.98] text-white font-bold shadow-lg shadow-emerald-950/50 transition text-sm sm:text-base">
+              建立牌桌大廳
+            </button>
+          </div>
+
+          <!-- 右側：加入好友房間 -->
+          <div class="bg-stone-800/85 border border-amber-500/30 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <h2 class="text-base sm:text-lg font-bold text-amber-300 mb-2.5 flex items-center gap-2">
+                <span>🔗 加入好友牌桌</span>
+              </h2>
+              <p class="text-xs text-stone-400 mb-3 leading-relaxed">
+                請向房主索取 <span class="text-amber-300 font-semibold">5 碼房間代碼</span>，或直接點擊房主分享的專屬邀請網址自動填入。
+              </p>
+              <label class="block text-xs text-stone-300 mb-1">輸入房間代碼</label>
+              <input id="join-room-code-input" type="text" maxlength="8" placeholder="例如：MJ888"
+                class="w-full px-3 py-2.5 rounded-lg bg-stone-900 border border-stone-600 text-center uppercase tracking-widest font-mono text-lg text-amber-300 placeholder-stone-600 focus:outline-none focus:border-amber-400 mb-4" />
+            </div>
+            <button id="join-room-btn" class="w-full py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 active:scale-[0.98] text-white font-bold shadow-lg shadow-amber-950/50 transition text-sm sm:text-base">
+              連線加入房間
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 等待室面板（開房或連線成功後顯示） -->
+      <div id="waiting-room-panel" class="hidden">
+        <div class="bg-stone-800/90 border border-amber-400/40 rounded-xl p-4 mb-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-stone-700">
+            <div>
+              <span class="text-xs text-stone-400 block">房間代碼（點擊複製邀請連結）</span>
+              <div class="flex items-center gap-2 mt-0.5">
+                <span id="display-room-code" class="text-2xl font-mono font-black tracking-widest text-amber-400">-----</span>
+                <button id="copy-invite-btn" class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-semibold transition">
+                  📋 複製邀請網址
+                </button>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xs text-stone-400 block">當前牌局設定</span>
+              <span id="display-rule-badge" class="inline-block mt-1 px-2.5 py-1 rounded-md bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                台灣 16 張麻將
+              </span>
+            </div>
+          </div>
+
+          <!-- 房主快速統一調整 AI 性格 -->
+          <div id="host-ai-batch-bar" class="hidden flex flex-wrap items-center justify-between gap-2 mt-3 bg-stone-900/80 px-3 py-2 rounded-lg border border-stone-700">
+            <span class="text-xs text-amber-300 font-bold">🤖 AI 電腦對手性格一鍵套用：</span>
+            <div class="flex items-center gap-1.5">
+              <button type="button" data-batch-ai="feeder" class="batch-ai-btn px-2.5 py-1 rounded bg-pink-900/70 hover:bg-pink-800 border border-pink-500/50 text-pink-200 text-xs font-bold">
+                🎁 放槍王
+              </button>
+              <button type="button" data-batch-ai="normal" class="batch-ai-btn px-2.5 py-1 rounded bg-sky-900/70 hover:bg-sky-800 border border-sky-500/50 text-sky-200 text-xs font-bold">
+                🙂 普通
+              </button>
+              <button type="button" data-batch-ai="god" class="batch-ai-btn px-2.5 py-1 rounded bg-amber-900/70 hover:bg-amber-800 border border-amber-500/50 text-amber-200 text-xs font-bold">
+                👑 麻將神
+              </button>
+            </div>
+          </div>
+
+          <!-- 四個座位狀態（含每位 AI 性格個別下拉選擇） -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-3" id="waiting-seats-grid">
+            <!-- 動態渲染四個座位 -->
+          </div>
+
+          <!-- 房主控制按鈕 / 訪客等待提示 -->
+          <div id="host-controls" class="hidden flex flex-col sm:flex-row gap-2.5 mt-2">
+            <button id="start-game-btn" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white font-bold shadow-lg transition text-sm sm:text-base">
+              🤖 AI 補滿空位並立即開局
+            </button>
+            <button id="leave-room-btn" class="px-4 py-3 rounded-xl bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs sm:text-sm font-semibold transition">
+              離開房間
+            </button>
+          </div>
+          <div id="guest-waiting-msg" class="hidden text-center py-2">
+            <p class="text-sm text-amber-300 font-semibold animate-pulse">⏳ 已連線至牌桌，等待房主開始遊戲...</p>
+            <button id="guest-leave-btn" class="mt-2 px-4 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs">
+              退出房間
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 訊息提示列 -->
+      <div id="lobby-toast" class="hidden mt-2 text-center text-xs sm:text-sm py-2 px-3 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-200"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 2. 正式麻將牌桌主畫面 ==================== -->
+  <div id="game-screen" class="hidden w-full h-full mahjong-table theme-emerald flex flex-col justify-between overflow-hidden select-none">
+
+    <!-- 頂部狀態欄 + 對家（上家/對面）區域 -->
+    <div class="w-full flex flex-col items-center pt-1.5 sm:pt-2.5 px-2 z-10">
+      <!-- 頂部功能列：規則資訊、設定抽屜按鈕、離開按鈕 -->
+      <div class="w-full flex items-center justify-between text-xs px-1 sm:px-3 mb-1">
+        <div class="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span id="table-rule-label" class="px-2 py-0.5 rounded bg-black/45 border border-amber-400/30 text-amber-300 font-bold">台灣16張</span>
+          <span id="table-shuffle-label" class="hidden sm:inline px-2 py-0.5 rounded bg-black/45 border border-emerald-400/30 text-emerald-200 font-semibold">⚡電動洗牌</span>
+          <span id="table-room-label" class="hidden md:inline px-2 py-0.5 rounded bg-black/45 text-stone-300 font-mono">房號: -----</span>
+          <!-- 日本麻將立直棒/寶牌顯示區 -->
+          <div id="jp-dora-bar" class="hidden items-center gap-1 px-2 py-0.5 rounded bg-black/55 border border-red-400/40 text-red-200">
+            <span>寶牌:</span>
+            <span id="jp-dora-tile" class="font-bold text-amber-300"></span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button id="quick-voice-btn" class="px-2 py-1 rounded-lg bg-black/45 hover:bg-black/65 border border-white/15 text-stone-200 transition" title="切換語音與音效">
+            🗣️ 語音開
+          </button>
+          <button id="quick-bgm-btn" class="px-2 py-1 rounded-lg bg-black/45 hover:bg-black/65 border border-white/15 text-stone-200 transition" title="切換背景音樂">
+            🎵 音樂開
+          </button>
+          <button id="table-open-settings-btn" class="px-2.5 py-1 rounded-lg bg-amber-600/80 hover:bg-amber-500 border border-amber-300/50 text-white font-bold transition shadow">
+            ⚙️ 設定
+          </button>
+          <button id="back-to-lobby-btn" class="px-2.5 py-1 rounded-lg bg-red-950/70 hover:bg-red-900/80 border border-red-400/30 text-red-200 transition">
+            離開
+          </button>
+        </div>
+      </div>
+
+      <!-- 對家（座位+2）資訊與暗牌列 -->
+      <div id="seat-top-container" class="flex flex-col items-center">
+        <div class="flex items-center gap-1.5 bg-black/50 px-3 py-0.5 rounded-full border border-white/10 mb-1">
+          <span id="top-wind-badge" class="text-xs font-black px-1.5 py-0.2 rounded bg-amber-500 text-stone-950">西</span>
+          <span id="top-name" class="text-xs font-bold text-white truncate max-w-[90px]">對家</span>
+          <span id="top-ai-badge" class="hidden text-[10px] px-1.5 rounded font-bold"></span>
+          <span id="top-score" class="text-xs font-mono text-amber-300">0分</span>
+          <div id="top-flowers" class="flex items-center gap-0.5"></div>
+          <span id="top-riichi-badge" class="hidden text-[10px] px-1.5 rounded bg-red-600 text-white font-bold">立直</span>
+        </div>
+        <!-- 對家手牌背 + 明牌 -->
+        <div class="flex items-center gap-2">
+          <div id="top-hand-backs" class="flex items-center gap-0.5"></div>
+          <div id="top-melds" class="flex items-center gap-1"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 中央對戰區：左家 + 中央牌河與羅盤 + 右家 -->
+    <div class="flex-1 w-full flex items-center justify-between px-1 sm:px-4 my-1 overflow-hidden relative">
+
+      <!-- 左家（上家，座位+3） -->
+      <div id="seat-left-container" class="flex flex-col items-center justify-center z-10 w-16 sm:w-24">
+        <div class="flex flex-col items-center bg-black/50 px-1.5 py-1 rounded-lg border border-white/10 mb-1 text-center">
+          <span id="left-wind-badge" class="text-[11px] font-black px-1.5 rounded bg-emerald-500 text-stone-950">北</span>
+          <span id="left-name" class="text-[11px] font-bold text-white truncate max-w-[58px] sm:max-w-[84px] mt-0.5">上家</span>
+          <span id="left-ai-badge" class="hidden text-[9px] px-1 rounded font-bold mt-0.5"></span>
+          <span id="left-score" class="text-[10px] font-mono text-amber-300">0</span>
+          <div id="left-flowers" class="flex flex-wrap justify-center gap-0.5 mt-0.5"></div>
+          <span id="left-riichi-badge" class="hidden text-[10px] px-1 rounded bg-red-600 text-white font-bold mt-0.5">立直</span>
+        </div>
+        <div id="left-hand-backs" class="flex flex-col items-center gap-0.5 max-h-[32vh] overflow-hidden"></div>
+        <div id="left-melds" class="flex flex-col items-center gap-1 mt-1"></div>
+      </div>
+
+      <!-- 中央牌河與風圈羅盤區域 -->
+      <div class="flex-1 h-full flex flex-col items-center justify-center relative max-w-3xl mx-auto">
+        <!-- 對家出牌河 -->
+        <div id="river-top" class="flex flex-wrap justify-center gap-0.5 max-w-[240px] sm:max-w-[380px] min-h-[32px] mb-1"></div>
+
+        <!-- 中間橫排：左家牌河 + 中央羅盤 + 右家牌河 -->
+        <div class="w-full flex items-center justify-center gap-1.5 sm:gap-4 my-0.5">
+          <!-- 左家出牌河 -->
+          <div id="river-left" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 min-w-[66px] sm:min-w-[115px] min-h-[64px] justify-items-center"></div>
+
+          <!-- 中央風圈、倒數計時器與剩餘牌數指示器 -->
+          <div id="center-compass" class="w-26 h-26 sm:w-36 sm:h-36 rounded-2xl bg-stone-950/90 border-2 border-amber-500/60 shadow-2xl flex flex-col items-center justify-center p-1.5 relative shrink-0">
+            <div id="turn-indicator-top" class="text-[10px] sm:text-xs font-bold text-stone-500">西</div>
+            <div class="w-full flex items-center justify-between px-1 my-0.5">
+              <span id="turn-indicator-left" class="text-[10px] sm:text-xs font-bold text-stone-500">北</span>
+              <div class="text-center">
+                <div id="round-wind-text" class="text-[11px] sm:text-xs font-black text-amber-400">東風局</div>
+                <!-- 出牌倒數計時大字 -->
+                <div id="turn-timer-display" class="text-base sm:text-xl font-mono font-black text-white leading-tight my-0.5">12s</div>
+                <div class="text-[10px] text-stone-300">餘 <span id="tiles-remaining-count" class="font-mono font-bold text-emerald-400">72</span> 張</div>
+              </div>
+              <span id="turn-indicator-right" class="text-[10px] sm:text-xs font-bold text-stone-500">南</span>
+            </div>
+            <div id="turn-indicator-bottom" class="text-[10px] sm:text-xs font-bold text-stone-500">東</div>
+            <!-- 底部進度條 -->
+            <div class="w-4/5 h-1.5 bg-stone-800 rounded-full overflow-hidden mt-1">
+              <div id="turn-timer-bar" class="h-full bg-emerald-400 transition-all duration-200" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- 右家出牌河 -->
+          <div id="river-right" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 min-w-[66px] sm:min-w-[115px] min-h-[64px] justify-items-center"></div>
+        </div>
+
+        <!-- 自家出牌河 -->
+        <div id="river-bottom" class="flex flex-wrap justify-center gap-0.5 max-w-[240px] sm:max-w-[380px] min-h-[32px] mt-1"></div>
+
+        <!-- 洗牌／發牌動畫視覺層 -->
+        <div id="shuffle-visual-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/60 backdrop-blur-[2px] rounded-2xl">
+          <div id="shuffle-visual-box" class="px-6 py-4 rounded-2xl bg-stone-900/95 border-2 border-amber-400 text-center shadow-2xl">
+            <div id="shuffle-visual-icon" class="text-4xl mb-2">⚡</div>
+            <div id="shuffle-visual-title" class="text-lg sm:text-2xl font-black text-amber-300">電動磁力洗牌升牌中...</div>
+            <div id="shuffle-visual-sub" class="text-xs text-stone-300 mt-1">雙層升降台自動理牌就緒</div>
+          </div>
+        </div>
+
+        <!-- 中央吃碰槓胡／補花大字動畫層 -->
+        <div id="action-fx-overlay" class="pointer-events-none absolute inset-0 flex items-center justify-center z-30"></div>
+      </div>
+
+      <!-- 右家（下家，座位+1） -->
+      <div id="seat-right-container" class="flex flex-col items-center justify-center z-10 w-16 sm:w-24">
+        <div class="flex flex-col items-center bg-black/50 px-1.5 py-1 rounded-lg border border-white/10 mb-1 text-center">
+          <span id="right-wind-badge" class="text-[11px] font-black px-1.5 rounded bg-sky-500 text-stone-950">南</span>
+          <span id="right-name" class="text-[11px] font-bold text-white truncate max-w-[58px] sm:max-w-[84px] mt-0.5">下家</span>
+          <span id="right-ai-badge" class="hidden text-[9px] px-1 rounded font-bold mt-0.5"></span>
+          <span id="right-score" class="text-[10px] font-mono text-amber-300">0</span>
+          <div id="right-flowers" class="flex flex-wrap justify-center gap-0.5 mt-0.5"></div>
+          <span id="right-riichi-badge" class="hidden text-[10px] px-1 rounded bg-red-600 text-white font-bold mt-0.5">立直</span>
+        </div>
+        <div id="right-hand-backs" class="flex flex-col items-center gap-0.5 max-h-[32vh] overflow-hidden"></div>
+        <div id="right-melds" class="flex flex-col items-center gap-1 mt-1"></div>
+      </div>
+    </div>
+
+    <!-- 底部自家手牌與操作按鈕區 -->
+    <div class="w-full flex flex-col items-center pb-2 sm:pb-4 px-1.5 sm:px-4 z-20 bg-gradient-to-t from-black/70 via-black/35 to-transparent">
+
+      <!-- 吃 / 碰 / 槓 / 立直 / 胡 / 過 浮動動作按鈕列 -->
+      <div id="action-buttons-bar" class="hidden flex flex-wrap items-center justify-center gap-2 mb-2 px-3 py-1.5 rounded-2xl bg-stone-950/90 border border-amber-400/50 shadow-2xl">
+        <!-- 動態生成可執行動作按鈕 -->
+      </div>
+
+      <!-- 吃牌組合選擇器（若有多種吃法時彈出） -->
+      <div id="chi-choice-bar" class="hidden flex items-center gap-2 mb-2 px-3 py-1.5 rounded-xl bg-stone-900/95 border border-emerald-400/60 shadow-xl">
+        <span class="text-xs text-emerald-300 font-bold">選擇吃牌組合：</span>
+        <div id="chi-options-container" class="flex items-center gap-2"></div>
+        <button id="cancel-chi-btn" class="px-2 py-1 rounded bg-stone-700 text-xs text-stone-300">取消</button>
+      </div>
+
+      <!-- 自家狀態列 + 明牌（吃碰槓） + 花牌 -->
+      <div class="w-full max-w-5xl flex flex-wrap items-center justify-between gap-2 mb-1.5 px-1">
+        <div class="flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full border border-amber-400/30">
+          <span id="bottom-wind-badge" class="text-xs font-black px-2 py-0.5 rounded bg-red-500 text-white">東</span>
+          <span id="bottom-name" class="text-xs sm:text-sm font-bold text-white">我</span>
+          <span id="bottom-dealer-badge" class="hidden text-[11px] px-1.5 py-0.2 rounded bg-amber-400 text-stone-950 font-black">莊</span>
+          <span id="bottom-score" class="text-xs sm:text-sm font-mono text-amber-300 font-bold">0分</span>
+          <span id="bottom-riichi-badge" class="hidden text-xs px-2 py-0.2 rounded bg-red-600 text-white font-bold">已立直</span>
+          <span id="jp-furiten-badge" class="hidden text-xs px-2 py-0.2 rounded bg-purple-700 text-white font-bold">振聽</span>
+        </div>
+
+        <!-- 提示文字（輪到誰出牌與剩餘秒數） -->
+        <div id="turn-status-banner" class="text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-400/40 text-emerald-200">
+          準備開始...
+        </div>
+
+        <!-- 自家花牌與明牌區 -->
+        <div class="flex items-center gap-2">
+          <div id="bottom-flowers" class="flex items-center gap-0.5 text-xs text-purple-300 font-bold"></div>
+          <div id="bottom-melds" class="flex items-center gap-1.5"></div>
+        </div>
+      </div>
+
+      <!-- 自家手牌區：手機直式自動雙排交錯大按鈕、橫式單排展開 -->
+      <div id="bottom-hand-container" class="w-full max-w-5xl flex flex-wrap sm:flex-nowrap items-end justify-center gap-0.5 sm:gap-1 min-h-[64px] sm:min-h-[82px] px-1">
+        <!-- 動態渲染自家手牌 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 3. 牌桌、牌面、語音音效、自訂音樂與限時設定彈窗 ==================== -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div class="w-full max-w-lg bg-stone-900 border-2 border-amber-500/50 rounded-2xl shadow-2xl p-5 text-white max-h-[92dvh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-stone-700 pb-3 mb-4">
+        <h3 class="text-lg sm:text-xl font-black text-amber-300 flex items-center gap-2">
+          <span>⚙️ 牌桌與視聽音效設定</span>
+        </h3>
+        <button id="close-settings-btn" class="px-3 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-sm font-bold">✕ 關閉</button>
+      </div>
+
+      <div class="space-y-4 text-xs sm:text-sm">
+        <!-- 1. 桌面樣式選擇 -->
+        <div class="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700">
+          <div class="font-bold text-amber-200 mb-2">🎨 桌面樣式主題</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" id="table-theme-options">
+            <button type="button" data-theme="emerald" class="theme-choice-btn p-2 rounded-lg border-2 border-amber-400 bg-emerald-900 text-white font-bold text-xs text-center">
+              🟢 祖母綠絨
+            </button>
+            <button type="button" data-theme="blue" class="theme-choice-btn p-2 rounded-lg border border-stone-600 bg-blue-950 text-blue-100 font-bold text-xs text-center">
+              🔵 電動深海藍
+            </button>
+            <button type="button" data-theme="tatami" class="theme-choice-btn p-2 rounded-lg border border-stone-600 bg-amber-900/80 text-amber-100 font-bold text-xs text-center">
+              🌾 日式榻榻米
+            </button>
+            <button type="button" data-theme="walnut" class="theme-choice-btn p-2 rounded-lg border border-stone-600 bg-stone-800 text-amber-200 font-bold text-xs text-center">
+              🪵 沉穩胡桃木
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 牌面風格切換 -->
+        <div class="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700">
+          <div class="font-bold text-amber-200 mb-2">🀄 麻將牌面風格</div>
+          <div class="grid grid-cols-2 gap-2.5">
+            <button type="button" id="tile-style-realistic-btn" class="p-2.5 rounded-xl border-2 border-amber-400 bg-stone-900 text-left transition">
+              <div class="font-black text-amber-300">✨ 擬真立體牌面</div>
+              <div class="text-[11px] text-stone-400 mt-0.5">3D 象牙白高光與翡翠綠牌背厚度</div>
+            </button>
+            <button type="button" id="tile-style-traditional-btn" class="p-2.5 rounded-xl border border-stone-600 bg-stone-900 text-left transition">
+              <div class="font-black text-emerald-300">📜 傳統清晰大字</div>
+              <div class="text-[11px] text-stone-400 mt-0.5">高對比平面放大字體、長輩護眼首選</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. 語音報牌與麻將音效（音量 + 靜音） -->
+        <div class="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-bold text-amber-200">🗣️ 語音報牌與打牌音效</span>
+            <button type="button" id="modal-voice-mute-btn" class="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold">
+              🔊 開啟中
+            </button>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-stone-400 w-12">音量</span>
+            <input id="voice-volume-slider" type="range" min="0" max="100" value="85" class="flex-1 accent-amber-400 cursor-pointer" />
+            <span id="voice-volume-label" class="text-xs font-mono text-amber-300 w-10 text-right">85%</span>
+          </div>
+          <div class="mt-2 flex justify-end">
+            <button type="button" id="test-voice-btn" class="px-2.5 py-1 rounded bg-stone-700 hover:bg-stone-600 text-xs text-amber-200">
+              ▶ 試聽語音報牌（「發財！自摸胡牌！」）
+            </button>
+          </div>
+        </div>
+
+        <!-- 4. 背景音樂匯入與音量控制 -->
+        <div class="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-bold text-amber-200">🎵 背景音樂（支援匯入本機音樂）</span>
+            <button type="button" id="modal-bgm-mute-btn" class="px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold">
+              🎵 播放中
+            </button>
+          </div>
+          <div class="flex items-center gap-3 mb-2.5">
+            <span class="text-xs text-stone-400 w-12">音量</span>
+            <input id="bgm-volume-slider" type="range" min="0" max="100" value="40" class="flex-1 accent-emerald-400 cursor-pointer" />
+            <span id="bgm-volume-label" class="text-xs font-mono text-emerald-300 w-10 text-right">40%</span>
+          </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-700/80">
+            <label class="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold cursor-pointer transition">
+              📂 匯入音樂檔 (MP3/WAV)
+              <input id="bgm-file-input" type="file" accept="audio/*" class="hidden" />
+            </label>
+            <button type="button" id="bgm-reset-default-btn" class="px-2.5 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-600 text-stone-200 text-xs">
+              切回內建國風旋律
+            </button>
+          </div>
+          <div id="bgm-track-name" class="text-[11px] text-emerald-300 mt-1.5 truncate">目前曲目：內建東方雅韻背景音樂</div>
+        </div>
+
+        <!-- 5. 洗牌方式與出牌限時秒數（2~20秒） -->
+        <div class="bg-stone-800/80 p-3.5 rounded-xl border border-stone-700">
+          <div class="font-bold text-amber-200 mb-2">⏱️ 洗牌方式與出牌限時設定（房主同步）</div>
+          <div class="grid grid-cols-2 gap-2 mb-2.5">
+            <button type="button" id="modal-shuffle-electric" class="py-2 px-2 rounded-lg border-2 border-amber-400 bg-stone-900 text-amber-300 text-xs font-bold">
+              ⚡ 電動洗牌法
+            </button>
+            <button type="button" id="modal-shuffle-manual" class="py-2 px-2 rounded-lg border border-stone-600 bg-stone-900 text-stone-300 text-xs font-bold">
+              👐 手動洗牌風
+            </button>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-stone-300">出牌限時</span>
+            <input id="modal-timeout-slider" type="range" min="2" max="20" value="12" class="flex-1 accent-amber-400 cursor-pointer" />
+            <span id="modal-timeout-label" class="text-xs font-mono font-bold text-amber-300 w-12 text-right">12 秒</span>
+          </div>
+          <p class="text-[11px] text-stone-400 mt-1">※ 超過設定秒數未出牌時，系統將自動幫您打出最不影響聽牌的好牌。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 4. 單局結算與台數明細彈窗 ==================== -->
+  <div id="round-result-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-xl bg-stone-900 border-2 border-amber-400/60 rounded-2xl shadow-2xl p-5 sm:p-6 text-white max-h-[90dvh] overflow-y-auto">
+      <div class="text-center border-b border-stone-700 pb-3 mb-4">
+        <h2 id="result-title" class="text-2xl sm:text-3xl font-black text-amber-400" style="font-family: 'Noto Serif TC', serif;">自摸胡牌！</h2>
+        <p id="result-subtitle" class="text-xs sm:text-sm text-stone-300 mt-1">贏家：玩家一（莊家）</p>
+      </div>
+
+      <!-- 胡牌完整牌型展示 -->
+      <div id="result-winning-hand" class="flex flex-wrap items-center justify-center gap-1 bg-emerald-950/60 border border-emerald-600/40 rounded-xl p-3 mb-4">
+      </div>
+
+      <!-- 台數 / 番數明細表 -->
+      <div class="bg-stone-800/80 rounded-xl p-3.5 mb-4 border border-stone-700">
+        <div class="text-xs font-bold text-amber-300 mb-2">役種 / 台數明細</div>
+        <div id="result-fan-list" class="space-y-1.5 text-xs sm:text-sm"></div>
+        <div class="border-t border-stone-600 mt-2.5 pt-2 flex items-center justify-between font-black text-base sm:text-lg text-amber-400">
+          <span>總計</span>
+          <span id="result-total-fan">5 台（+1500 分）</span>
+        </div>
+      </div>
+
+      <!-- 四家當前總分排行 -->
+      <div id="result-scoreboard" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5"></div>
+
+      <!-- 下一局按鈕 -->
+      <div class="flex justify-center gap-3">
+        <button id="next-round-btn" class="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-stone-950 font-black text-base shadow-lg transition">
+          🀄 再來一局（下一局）
+        </button>
+      </div>
+      <p id="guest-next-round-hint" class="hidden text-center text-xs text-stone-400 mt-2">等待房主點擊「再來一局」...</p>
+    </div>
+  </div>
+
+  <!-- 隱藏的原生 Audio 元件，用於播放使用者匯入的本機背景音樂 -->
+  <audio id="custom-bgm-audio" loop></audio>
+
+  <script>
+    /**
+     * ============================================================================
+     * 線上四人麻將 GitHub Pages 專用版 - 完整升級引擎
+     * 包含：電動/手動洗牌、桌面與擬真/傳統牌面、語音報牌+音效音量、自訂音樂匯入、
+     *       2~20秒限時自動代打、AI三種性格（放槍王 / 普通 / 麻將神）
+     * ============================================================================
+     */
+
+    // ------------------------- 1. 語音報牌、合成音效與背景音樂引擎 -------------------------
+    const CN_NUMS = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    const HONOR_NAMES = {
+      '1z': '東', '2z': '南', '3z': '西', '4z': '北',
+      '5z': '中', '6z': '發', '7z': '白'
+    };
+    const FLOWER_NAMES = {
+      '1f': '春', '2f': '夏', '3f': '秋', '4f': '冬',
+      '5f': '梅', '6f': '蘭', '7f': '菊', '8f': '竹'
+    };
+    const FLOWER_META = {
+      '1f': { name: '春', icon: '🌸', color: '#ec4899' },
+      '2f': { name: '夏', icon: '☀️', color: '#f59e0b' },
+      '3f': { name: '秋', icon: '🍁', color: '#ea580c' },
+      '4f': { name: '冬', icon: '❄️', color: '#0284c7' },
+      '5f': { name: '梅', icon: '🌺', color: '#e11d48' },
+      '6f': { name: '蘭', icon: '🌿', color: '#7c3aed' },
+      '7f': { name: '菊', icon: '🌼', color: '#ca8a04' },
+      '8f': { name: '竹', icon: '🎋', color: '#16a34a' }
+    };
+    const WIND_LABELS = ['東', '南', '西', '北'];
+
+    // 將牌面代碼轉為語音報牌念法（例如 1m -> "一萬", 5z -> "紅中", 7z -> "白板"）
+    function getTileSpeechName(code) {
+      if (!code) return '';
+      const num = parseInt(code[0], 10);
+      const suit = code[1];
+      if (suit === 'm') return `${CN_NUMS[num]}萬`;
+      if (suit === 'p') return `${CN_NUMS[num]}筒`;
+      if (suit === 's') return `${CN_NUMS[num]}條`;
+      if (suit === 'z') {
+        const map = {
+          '1z': '東風', '2z': '南風', '3z': '西風', '4z': '北風',
+          '5z': '紅中', '6z': '發財', '7z': '白板'
+        };
+        return map[code] || '';
+      }
+      if (suit === 'f') return `補花${FLOWER_NAMES[code] || ''}`;
+      return '';
+    }
+
+    class AudioMediaEngine {
+      constructor() {
+        this.voiceEnabled = true;
+        this.voiceVolume = 0.85; // 0.0 ~ 1.0
+        this.bgmEnabled = true;
+        this.bgmVolume = 0.40;   // 0.0 ~ 1.0
+        this.hasCustomBgm = false;
+        this.ctx = null;
+        this.synthBgmTimer = null;
+        this.synthNoteIdx = 0;
+        this.customAudioEl = document.getElementById('custom-bgm-audio');
+        this.customAudioEl.volume = this.bgmVolume;
+      }
+
+      initContext() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // 繁體中文語音報牌
+      speak(text) {
+        if (!this.voiceEnabled || this.voiceVolume <= 0 || !text) return;
+        if ('speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(text);
+            utter.lang = 'zh-TW';
+            utter.volume = this.voiceVolume;
+            utter.rate = 1.18;
+            utter.pitch = 1.05;
+            window.speechSynthesis.speak(utter);
+          } catch (e) {
+            // 忽略部分瀏覽器無語音包例外
+          }
+        }
+      }
+
+      // 打牌撞擊桌面聲 + 語音報牌
+      playDiscard(tileCode) {
+        if (tileCode) this.speak(getTileSpeechName(tileCode));
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(540, now);
+        osc.frequency.exponentialRampToValueAtTime(115, now + 0.065);
+        gain.gain.setValueAtTime(0.45 * this.voiceVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.08);
+      }
+
+      // 電動洗牌機械馬達與磁力理牌聲
+      playElectricShuffle() {
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 8; i++) {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160 + i * 28, now + i * 0.07);
+          gain.gain.setValueAtTime(0.14 * this.voiceVolume, now + i * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.07 + 0.06);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + i * 0.07);
+          osc.stop(now + i * 0.07 + 0.065);
+        }
+      }
+
+      // 手動洗牌（手搓牌浪碰撞與擲骰子聲）
+      playManualShuffle() {
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 12; i++) {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(300 + Math.random() * 450, now + i * 0.055);
+          gain.gain.setValueAtTime(0.22 * this.voiceVolume, now + i * 0.055);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.055 + 0.045);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + i * 0.055);
+          osc.stop(now + i * 0.055 + 0.05);
+        }
+      }
+
+      // 發牌清脆推牌聲
+      playDealTick() {
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(760, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.035);
+        gain.gain.setValueAtTime(0.2 * this.voiceVolume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.045);
+      }
+
+      // 吃 / 碰 / 槓 / 立直 / 補花提示音
+      playAction(speechWord) {
+        if (speechWord) this.speak(speechWord);
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        [440, 660].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+          gain.gain.setValueAtTime(0.32 * this.voiceVolume, now + idx * 0.07);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.14);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.07);
+          osc.stop(now + idx * 0.07 + 0.15);
+        });
+      }
+
+      // 胡牌勝利和弦音效
+      playWin(speechWord) {
+        if (speechWord) this.speak(speechWord);
+        if (!this.voiceEnabled || this.voiceVolume <= 0) return;
+        this.initContext();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.09);
+          gain.gain.setValueAtTime(0.35 * this.voiceVolume, now + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.09 + 0.35);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.09);
+          osc.stop(now + idx * 0.09 + 0.36);
+        });
+      }
+
+      // 啟動背景音樂（若有匯入檔案則播檔案，否則播內建東方五聲音階旋律）
+      startBgm() {
+        if (!this.bgmEnabled || this.bgmVolume <= 0) {
+          this.stopBgm();
+          return;
+        }
+        if (this.hasCustomBgm) {
+          this.stopSynthBgm();
+          this.customAudioEl.volume = this.bgmVolume;
+          this.customAudioEl.play().catch(() => {});
+        } else {
+          this.customAudioEl.pause();
+          this.startSynthBgm();
+        }
+      }
+
+      stopBgm() {
+        this.customAudioEl.pause();
+        this.stopSynthBgm();
+      }
+
+      startSynthBgm() {
+        if (this.synthBgmTimer) return;
+        // 柔和東方五聲音階旋律 (C4, D4, E4, G4, A4, C5, A4, G4)
+        const pentatonic = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 440.00, 392.00, 329.63, 293.66];
+        this.synthBgmTimer = setInterval(() => {
+          if (!this.bgmEnabled || this.bgmVolume <= 0 || this.hasCustomBgm) return;
+          this.initContext();
+          if (!this.ctx) return;
+          const freq = pentatonic[this.synthNoteIdx % pentatonic.length];
+          this.synthNoteIdx++;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.001, now);
+          gain.gain.linearRampToValueAtTime(0.08 * this.bgmVolume, now + 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.85);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.9);
+        }, 950);
+      }
+
+      stopSynthBgm() {
+        if (this.synthBgmTimer) {
+          clearInterval(this.synthBgmTimer);
+          this.synthBgmTimer = null;
+        }
+      }
+
+      setCustomAudioFile(file) {
+        if (!file) return;
+        const url = URL.createObjectURL(file);
+        this.customAudioEl.src = url;
+        this.hasCustomBgm = true;
+        this.bgmEnabled = true;
+        this.startBgm();
+      }
+
+      resetToDefaultBgm() {
+        this.hasCustomBgm = false;
+        this.customAudioEl.pause();
+        this.customAudioEl.removeAttribute('src');
+        if (this.bgmEnabled) this.startBgm();
+      }
+    }
+
+    const sound = new AudioMediaEngine();
+
+    // ------------------------- 2. 麻將牌定義與渲染工具 -------------------------
+    const TILE_ORDER_MAP = {};
+    let orderIdx = 0;
+    for (let i = 1; i <= 9; i++) TILE_ORDER_MAP[`${i}m`] = orderIdx++;
+    for (let i = 1; i <= 9; i++) TILE_ORDER_MAP[`${i}p`] = orderIdx++;
+    for (let i = 1; i <= 9; i++) TILE_ORDER_MAP[`${i}s`] = orderIdx++;
+    for (let i = 1; i <= 7; i++) TILE_ORDER_MAP[`${i}z`] = orderIdx++;
+    for (let i = 1; i <= 8; i++) TILE_ORDER_MAP[`${i}f`] = orderIdx++;
+
+    function sortTiles(tiles) {
+      return [...tiles].sort((a, b) => (TILE_ORDER_MAP[a] ?? 999) - (TILE_ORDER_MAP[b] ?? 999));
+    }
+
+    function isFlower(code) {
+      return code && code.endsWith('f');
+    }
+
+    // ==================== 筒子 SVG 圖形繪製器（完全無中文字） ====================
+    function renderDotCircleSVG(cx, cy, r, color) {
+      const palette = {
+        blue:  { outer: '#1d4ed8', mid: '#3b82f6', core: '#1e3a8a' },
+        green: { outer: '#15803d', mid: '#22c55e', core: '#14532d' },
+        red:   { outer: '#b91c1c', mid: '#ef4444', core: '#7f1d1d' }
+      }[color] || { outer: '#1d4ed8', mid: '#3b82f6', core: '#1e3a8a' };
+
+      return `
+        <g>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="${palette.outer}" />
+          <circle cx="${cx}" cy="${cy}" r="${(r * 0.72).toFixed(2)}" fill="#ffffff" />
+          <circle cx="${cx}" cy="${cy}" r="${(r * 0.56).toFixed(2)}" fill="${palette.mid}" />
+          <circle cx="${cx}" cy="${cy}" r="${(r * 0.34).toFixed(2)}" fill="none" stroke="#ffffff" stroke-width="${Math.max(1.2, r * 0.12).toFixed(2)}" stroke-dasharray="${(r * 0.35).toFixed(2)} ${(r * 0.25).toFixed(2)}" />
+          <circle cx="${cx}" cy="${cy}" r="${(r * 0.18).toFixed(2)}" fill="${palette.core}" />
+        </g>
+      `;
+    }
+
+    function renderDotsSVG(num) {
+      // 1筒：經典大型彩繪同心花紋大餅
+      if (num === 1) {
+        let petals = '';
+        for (let a = 0; a < 360; a += 45) {
+          const rad = (a * Math.PI) / 180;
+          const px = (50 + 23 * Math.cos(rad)).toFixed(1);
+          const py = (68 + 23 * Math.sin(rad)).toFixed(1);
+          petals += `<circle cx="${px}" cy="${py}" r="4.5" fill="#15803d" />`;
+        }
+        return `
+          <svg viewBox="0 0 100 136" aria-label="1筒">
+            <circle cx="50" cy="68" r="39" fill="#1e3a8a" />
+            <circle cx="50" cy="68" r="34" fill="#fef08a" />
+            <circle cx="50" cy="68" r="30" fill="#15803d" />
+            <circle cx="50" cy="68" r="26" fill="#ffffff" />
+            ${petals}
+            <circle cx="50" cy="68" r="16" fill="#dc2626" />
+            <circle cx="50" cy="68" r="10" fill="none" stroke="#fef08a" stroke-width="2.2" stroke-dasharray="3 2" />
+            <circle cx="50" cy="68" r="4.5" fill="#ffffff" />
+          </svg>
+        `;
+      }
+
+      const layouts = {
+        2: [
+          { x: 50, y: 38, r: 22, c: 'green' },
+          { x: 50, y: 98, r: 22, c: 'blue' }
+        ],
+        3: [
+          { x: 26, y: 28, r: 16, c: 'blue' },
+          { x: 50, y: 68, r: 16, c: 'red' },
+          { x: 74, y: 108, r: 16, c: 'green' }
+        ],
+        4: [
+          { x: 30, y: 38, r: 17, c: 'blue' },
+          { x: 70, y: 38, r: 17, c: 'green' },
+          { x: 30, y: 98, r: 17, c: 'green' },
+          { x: 70, y: 98, r: 17, c: 'blue' }
+        ],
+        5: [
+          { x: 27, y: 32, r: 14.5, c: 'blue' },
+          { x: 73, y: 32, r: 14.5, c: 'green' },
+          { x: 50, y: 68, r: 15.5, c: 'red' },
+          { x: 27, y: 104, r: 14.5, c: 'green' },
+          { x: 73, y: 104, r: 14.5, c: 'blue' }
+        ],
+        6: [
+          { x: 31, y: 28, r: 14.5, c: 'green' },
+          { x: 69, y: 28, r: 14.5, c: 'green' },
+          { x: 31, y: 74, r: 14.5, c: 'red' },
+          { x: 69, y: 74, r: 14.5, c: 'red' },
+          { x: 31, y: 108, r: 14.5, c: 'red' },
+          { x: 69, y: 108, r: 14.5, c: 'red' }
+        ],
+        7: [
+          { x: 23, y: 22, r: 11.5, c: 'green' },
+          { x: 50, y: 33, r: 11.5, c: 'green' },
+          { x: 77, y: 44, r: 11.5, c: 'green' },
+          { x: 31, y: 76, r: 13.5, c: 'red' },
+          { x: 69, y: 76, r: 13.5, c: 'red' },
+          { x: 31, y: 110, r: 13.5, c: 'red' },
+          { x: 69, y: 110, r: 13.5, c: 'red' }
+        ],
+        8: [
+          { x: 31, y: 22, r: 12, c: 'blue' }, { x: 69, y: 22, r: 12, c: 'blue' },
+          { x: 31, y: 52, r: 12, c: 'green' }, { x: 69, y: 52, r: 12, c: 'green' },
+          { x: 31, y: 84, r: 12, c: 'blue' }, { x: 69, y: 84, r: 12, c: 'blue' },
+          { x: 31, y: 114, r: 12, c: 'green' }, { x: 69, y: 114, r: 12, c: 'green' }
+        ],
+        9: [
+          { x: 22, y: 26, r: 11.5, c: 'blue' },  { x: 50, y: 26, r: 11.5, c: 'blue' },  { x: 78, y: 26, r: 11.5, c: 'blue' },
+          { x: 22, y: 68, r: 11.5, c: 'red' },   { x: 50, y: 68, r: 11.5, c: 'red' },   { x: 78, y: 68, r: 11.5, c: 'red' },
+          { x: 22, y: 110, r: 11.5, c: 'green' },{ x: 50, y: 110, r: 11.5, c: 'green' },{ x: 78, y: 110, r: 11.5, c: 'green' }
+        ]
+      };
+
+      const dots = (layouts[num] || []).map(d => renderDotCircleSVG(d.x, d.y, d.r, d.c)).join('');
+      return `<svg viewBox="0 0 100 136" aria-label="${num}筒">${dots}</svg>`;
+    }
+
+    // ==================== 條子 SVG 圖形繪製器（一索孔雀鳥形 + 竹節圖形，無文字） ====================
+    function renderBambooStickSVG(x, y, w, h, color, tiltDeg = 0) {
+      const palette = {
+        green: { main: '#15803d', light: '#4ade80', dark: '#052e16' },
+        red:   { main: '#dc2626', light: '#fca5a5', dark: '#7f1d1d' },
+        blue:  { main: '#1d4ed8', light: '#93c5fd', dark: '#1e3a8a' }
+      }[color] || { main: '#15803d', light: '#4ade80', dark: '#052e16' };
+
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const midY = y + h * 0.5;
+      const transformAttr = tiltDeg !== 0 ? `transform="rotate(${tiltDeg} ${cx} ${cy})"` : '';
+
+      return `
+        <g ${transformAttr}>
+          <!-- 竹身外框 -->
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${(w * 0.45).toFixed(1)}" fill="${palette.main}" stroke="${palette.dark}" stroke-width="1.2" />
+          <!-- 竹筒高光 -->
+          <rect x="${(x + w * 0.24).toFixed(1)}" y="${(y + 2).toFixed(1)}" width="${(w * 0.22).toFixed(1)}" height="${(h - 4).toFixed(1)}" rx="1.5" fill="${palette.light}" opacity="0.7" />
+          <!-- 中央竹節凸起環 -->
+          <rect x="${(x - 1.2).toFixed(1)}" y="${(midY - 2.2).toFixed(1)}" width="${(w + 2.4).toFixed(1)}" height="4.4" rx="2" fill="#ffffff" stroke="${palette.dark}" stroke-width="1" />
+          <line x1="${x}" y1="${midY}" x2="${x + w}" y2="${midY}" stroke="${palette.main}" stroke-width="1.4" />
+        </g>
+      `;
+    }
+
+    function renderBambooSVG(num) {
+      // 1條（一索）：經典彩色孔雀／麻雀鳥形插畫
+      if (num === 1) {
+        return `
+          <svg viewBox="0 0 100 136" aria-label="1條">
+            <!-- 尾羽 -->
+            <path d="M46 88 L22 122 L38 118 L48 96 Z" fill="#15803d" />
+            <path d="M50 88 L45 126 L56 124 L55 94 Z" fill="#dc2626" />
+            <path d="M54 88 L64 122 L76 116 L58 92 Z" fill="#1d4ed8" />
+            <!-- 圓潤鳥身 -->
+            <ellipse cx="52" cy="68" rx="22" ry="26" fill="#16a34a" stroke="#052e16" stroke-width="2" />
+            <!-- 紅色胸羽 -->
+            <path d="M36 56 Q52 48 66 64 Q60 86 42 84 Q32 72 36 56 Z" fill="#ef4444" />
+            <!-- 翅膀層次 -->
+            <path d="M48 54 Q74 56 72 80 Q56 84 46 72 Z" fill="#15803d" stroke="#fef08a" stroke-width="1.5" />
+            <path d="M52 62 Q68 64 66 76 Q56 78 50 70 Z" fill="#2563eb" />
+            <!-- 鳥頭與冠羽 -->
+            <circle cx="44" cy="36" r="13" fill="#15803d" stroke="#052e16" stroke-width="2" />
+            <path d="M44 23 Q54 14 62 20 Q54 24 48 27 Z" fill="#dc2626" />
+            <path d="M48 26 Q60 20 66 26 Q56 29 50 30 Z" fill="#eab308" />
+            <!-- 鳥喙與眼睛 -->
+            <polygon points="32,35 20,39 32,42" fill="#f59e0b" stroke="#78350f" stroke-width="1" />
+            <circle cx="41" cy="34" r="3.2" fill="#ffffff" />
+            <circle cx="40" cy="34" r="1.7" fill="#0f172a" />
+            <!-- 雙爪 -->
+            <path d="M44 92 L40 104 M40 104 L34 106 M40 104 L45 107" stroke="#b45309" stroke-width="2.4" stroke-linecap="round" />
+            <path d="M56 92 L58 104 M58 104 L53 107 M58 104 L64 106" stroke="#b45309" stroke-width="2.4" stroke-linecap="round" />
+          </svg>
+        `;
+      }
+
+      const sticksByNum = {
+        2: [
+          { x: 43, y: 16, w: 14, h: 46, c: 'blue' },
+          { x: 43, y: 74, w: 14, h: 46, c: 'green' }
+        ],
+        3: [
+          { x: 43, y: 15, w: 14, h: 44, c: 'blue' },
+          { x: 22, y: 74, w: 14, h: 46, c: 'green' },
+          { x: 64, y: 74, w: 14, h: 46, c: 'green' }
+        ],
+        4: [
+          { x: 24, y: 16, w: 14, h: 46, c: 'blue' },
+          { x: 62, y: 16, w: 14, h: 46, c: 'green' },
+          { x: 24, y: 74, w: 14, h: 46, c: 'green' },
+          { x: 62, y: 74, w: 14, h: 46, c: 'blue' }
+        ],
+        5: [
+          { x: 18, y: 16, w: 13, h: 45, c: 'green' },
+          { x: 69, y: 16, w: 13, h: 45, c: 'blue' },
+          { x: 43.5, y: 45, w: 13, h: 46, c: 'red' },
+          { x: 18, y: 75, w: 13, h: 45, c: 'blue' },
+          { x: 69, y: 75, w: 13, h: 45, c: 'green' }
+        ],
+        6: [
+          { x: 19, y: 16, w: 13, h: 46, c: 'green' },
+          { x: 43.5, y: 16, w: 13, h: 46, c: 'green' },
+          { x: 68, y: 16, w: 13, h: 46, c: 'green' },
+          { x: 19, y: 74, w: 13, h: 46, c: 'blue' },
+          { x: 43.5, y: 74, w: 13, h: 46, c: 'blue' },
+          { x: 68, y: 74, w: 13, h: 46, c: 'blue' }
+        ],
+        7: [
+          { x: 44, y: 10, w: 12, h: 34, c: 'red' },
+          { x: 19, y: 49, w: 12.5, h: 36, c: 'green' },
+          { x: 43.75, y: 49, w: 12.5, h: 36, c: 'green' },
+          { x: 68.5, y: 49, w: 12.5, h: 36, c: 'green' },
+          { x: 19, y: 90, w: 12.5, h: 36, c: 'blue' },
+          { x: 43.75, y: 90, w: 12.5, h: 36, c: 'blue' },
+          { x: 68.5, y: 90, w: 12.5, h: 36, c: 'blue' }
+        ],
+        8: [
+          // 經典八索對稱 M / W 框型
+          { x: 16, y: 14, w: 12, h: 46, c: 'green' },
+          { x: 34, y: 22, w: 11, h: 36, c: 'green', tilt: -26 },
+          { x: 55, y: 22, w: 11, h: 36, c: 'green', tilt: 26 },
+          { x: 72, y: 14, w: 12, h: 46, c: 'green' },
+          { x: 16, y: 76, w: 12, h: 46, c: 'blue' },
+          { x: 34, y: 78, w: 11, h: 36, c: 'red', tilt: 26 },
+          { x: 55, y: 78, w: 11, h: 36, c: 'red', tilt: -26 },
+          { x: 72, y: 76, w: 12, h: 46, c: 'blue' }
+        ],
+        9: [
+          { x: 18, y: 11, w: 12.5, h: 34, c: 'red' },
+          { x: 43.75, y: 11, w: 12.5, h: 34, c: 'blue' },
+          { x: 69.5, y: 11, w: 12.5, h: 34, c: 'green' },
+          { x: 18, y: 51, w: 12.5, h: 34, c: 'red' },
+          { x: 43.75, y: 51, w: 12.5, h: 34, c: 'blue' },
+          { x: 69.5, y: 51, w: 12.5, h: 34, c: 'green' },
+          { x: 18, y: 91, w: 12.5, h: 34, c: 'red' },
+          { x: 43.75, y: 91, w: 12.5, h: 34, c: 'blue' },
+          { x: 69.5, y: 91, w: 12.5, h: 34, c: 'green' }
+        ]
+      };
+
+      const sticks = (sticksByNum[num] || [])
+        .map(s => renderBambooStickSVG(s.x, s.y, s.w, s.h, s.c, s.tilt || 0))
+        .join('');
+      return `<svg viewBox="0 0 100 136" aria-label="${num}條">${sticks}</svg>`;
+    }
+
+    // ==================== 萬子 SVG 書法雕刻繪製器（徹底告別新細明體） ====================
+    function renderWanSVG(num) {
+      const cnDigit = CN_NUMS[num] || '';
+      return `
+        <svg viewBox="0 0 100 136" aria-label="${cnDigit}萬">
+          <defs>
+            <linearGradient id="wanBlueGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#1e3a8a" />
+              <stop offset="100%" stop-color="#0f172a" />
+            </linearGradient>
+            <linearGradient id="wanRedGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#dc2626" />
+              <stop offset="100%" stop-color="#7f1d1d" />
+            </linearGradient>
+          </defs>
+          <!-- 精緻古典細線內框 -->
+          <rect x="8" y="8" width="84" height="120" rx="10" fill="none" stroke="#d97706" stroke-width="1.2" opacity="0.35" />
+          <!-- 上方數字（一～九）立體楷書印刻 -->
+          <text x="50" y="54" text-anchor="middle" font-size="48" class="mj-svg-char"
+            fill="url(#wanBlueGrad)" stroke="#ffffff" stroke-width="2.5">${cnDigit}</text>
+          <!-- 中間朱紅印章裝飾線 -->
+          <line x1="26" y1="66" x2="74" y2="66" stroke="#b91c1c" stroke-width="1.6" opacity="0.45" stroke-linecap="round" />
+          <!-- 下方「萬」字朱砂紅篆楷雕刻 -->
+          <text x="50" y="116" text-anchor="middle" font-size="52" class="mj-svg-char"
+            fill="url(#wanRedGrad)" stroke="#fef2f2" stroke-width="2">萬</text>
+        </svg>
+      `;
+    }
+
+    // ==================== 東南西北中發白 SVG 書法雕刻繪製器 ====================
+    function renderHonorSVG(code) {
+      if (code === '7z') {
+        // 白板：經典青花瓷雙線回紋框 + 中心雕花
+        return `
+          <svg viewBox="0 0 100 136" aria-label="白板">
+            <rect x="14" y="16" width="72" height="104" rx="10" fill="none" stroke="#1d4ed8" stroke-width="5" />
+            <rect x="22" y="24" width="56" height="88" rx="6" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6 3" />
+            <path d="M22 36 L34 24 M78 36 L66 24 M22 100 L34 112 M78 100 L66 112" stroke="#1e40af" stroke-width="2.5" stroke-linecap="round" />
+            <circle cx="50" cy="68" r="6" fill="none" stroke="#93c5fd" stroke-width="1.8" />
+          </svg>
+        `;
+      }
+
+      const config = {
+        '1z': { char: '東', topColor: '#1e293b', botColor: '#020617', ring: '#64748b' },
+        '2z': { char: '南', topColor: '#1e293b', botColor: '#020617', ring: '#64748b' },
+        '3z': { char: '西', topColor: '#1e293b', botColor: '#020617', ring: '#64748b' },
+        '4z': { char: '北', topColor: '#1e293b', botColor: '#020617', ring: '#64748b' },
+        '5z': { char: '中', topColor: '#ef4444', botColor: '#991b1b', ring: '#fca5a5' },
+        '6z': { char: '發', topColor: '#16a34a', botColor: '#064e3b', ring: '#86efac' }
+      }[code] || { char: HONOR_NAMES[code], topColor: '#1e293b', botColor: '#0f172a', ring: '#94a3b8' };
+
+      const gradId = `honorGrad_${code}`;
+      return `
+        <svg viewBox="0 0 100 136" aria-label="${config.char}">
+          <defs>
+            <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${config.topColor}" />
+              <stop offset="100%" stop-color="${config.botColor}" />
+            </linearGradient>
+          </defs>
+          <!-- 牌面微雕圓環底紋 -->
+          <circle cx="50" cy="68" r="38" fill="none" stroke="${config.ring}" stroke-width="1.5" opacity="0.35" />
+          <!-- 書法大字立體陰影層 -->
+          <text x="52" y="94" text-anchor="middle" font-size="76" class="mj-svg-char"
+            fill="rgba(0,0,0,0.16)">${config.char}</text>
+          <!-- 書法大字主體 -->
+          <text x="50" y="92" text-anchor="middle" font-size="76" class="mj-svg-char"
+            fill="url(#${gradId})" stroke="#ffffff" stroke-width="2.5">${config.char}</text>
+        </svg>
+      `;
+    }
+
+    // ==================== 花牌（春夏秋冬梅蘭菊竹）SVG 繪製器 ====================
+    function renderFlowerSVG(code) {
+      const meta = FLOWER_META[code] || { name: FLOWER_NAMES[code], icon: '🌸', color: '#9333ea' };
+      const idxNum = code[0];
+      return `
+        <svg viewBox="0 0 100 136" aria-label="${meta.name}">
+          <rect x="8" y="8" width="84" height="120" rx="10" fill="#fdf4ff" stroke="${meta.color}" stroke-width="2.5" opacity="0.85" />
+          <text x="22" y="30" font-size="20" font-weight="900" fill="${meta.color}" font-family="Inter, sans-serif">${idxNum}</text>
+          <text x="50" y="66" text-anchor="middle" font-size="40">${meta.icon}</text>
+          <text x="50" y="114" text-anchor="middle" font-size="42" class="mj-svg-char" fill="${meta.color}" stroke="#ffffff" stroke-width="2">${meta.name}</text>
+        </svg>
+      `;
+    }
+
+    function renderTileInnerHTML(code, isSmall = false) {
+      if (!code) return '';
+      const num = parseInt(code[0], 10);
+      const suit = code[1];
+
+      if (suit === 'm') {
+        // 萬子：使用獨立書法向量 SVG 渲染（一～九萬），徹底取代新細明體
+        return renderWanSVG(num);
+      }
+      if (suit === 'p') {
+        // 筒子：完全以圓形同心圓 SVG 圖形呈現，不顯示任何文字
+        return renderDotsSVG(num);
+      }
+      if (suit === 's') {
+        // 條子：一索為彩色鳥形 SVG、二至九條為竹節圖形 SVG，不顯示任何文字
+        return renderBambooSVG(num);
+      }
+      if (suit === 'z') {
+        // 東南西北中發白：使用書法立體雕刻 SVG 渲染
+        return renderHonorSVG(code);
+      }
+      if (suit === 'f') {
+        // 春夏秋冬梅蘭菊竹：使用花牌專屬圖示 + 書法字 SVG 渲染
+        return renderFlowerSVG(code);
+      }
+      return code;
+    }
+
+    // 渲染花牌區小牌徽章（顯示在各家頭像與牌架旁）
+    function renderFlowerMiniBadge(code) {
+      const meta = FLOWER_META[code] || { name: FLOWER_NAMES[code], icon: '🌸', color: '#9333ea' };
+      return `
+        <span title="花牌：${meta.name}" class="animate-flower-pop inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-50 border border-amber-400 shadow-sm text-[10px] sm:text-xs font-black" style="color:${meta.color}">
+          <span>${meta.icon}</span><span>${meta.name}</span>
+        </span>
+      `;
+    }
+
+    function getNextDoraTile(indicator) {
+      if (!indicator) return '';
+      const num = parseInt(indicator[0], 10);
+      const suit = indicator[1];
+      if (suit === 'm' || suit === 'p' || suit === 's') {
+        return `${num === 9 ? 1 : num + 1}${suit}`;
+      }
+      if (suit === 'z') {
+        if (num <= 4) return `${num === 4 ? 1 : num + 1}z`;
+        return `${num === 7 ? 5 : num + 1}z`;
+      }
+      return indicator;
+    }
+
+    // ------------------------- 3. 通用胡牌演算法與聽牌檢測 -------------------------
+    function canWinStandard(tiles, rule = 'TW16') {
+      const sorted = sortTiles(tiles);
+      const total = sorted.length;
+      if (total % 3 !== 2) return false;
+
+      if (rule === 'JP13' && total === 14) {
+        let pairs = 0;
+        let i = 0;
+        while (i < 14) {
+          if (i + 1 < 14 && sorted[i] === sorted[i + 1]) {
+            if (i + 2 < 14 && sorted[i] === sorted[i + 2]) break;
+            pairs++;
+            i += 2;
+          } else {
+            break;
+          }
+        }
+        if (pairs === 7) return true;
+      }
+
+      const counts = {};
+      for (const t of sorted) counts[t] = (counts[t] || 0) + 1;
+      const uniqueTiles = Object.keys(counts);
+
+      for (const pairTile of uniqueTiles) {
+        if (counts[pairTile] >= 2) {
+          const copy = { ...counts };
+          copy[pairTile] -= 2;
+          if (checkMeldsRecursive(copy, total - 2)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function checkMeldsRecursive(counts, remaining) {
+      if (remaining === 0) return true;
+      let first = null;
+      for (const k of Object.keys(TILE_ORDER_MAP)) {
+        if ((counts[k] || 0) > 0) {
+          first = k;
+          break;
+        }
+      }
+      if (!first) return remaining === 0;
+
+      if (counts[first] >= 3) {
+        counts[first] -= 3;
+        if (checkMeldsRecursive(counts, remaining - 3)) return true;
+        counts[first] += 3;
+      }
+
+      const num = parseInt(first[0], 10);
+      const suit = first[1];
+      if ((suit === 'm' || suit === 'p' || suit === 's') && num <= 7) {
+        const second = `${num + 1}${suit}`;
+        const third = `${num + 2}${suit}`;
+        if ((counts[second] || 0) > 0 && (counts[third] || 0) > 0) {
+          counts[first]--;
+          counts[second]--;
+          counts[third]--;
+          if (checkMeldsRecursive(counts, remaining - 3)) return true;
+          counts[first]++;
+          counts[second]++;
+          counts[third]++;
+        }
+      }
+
+      return false;
+    }
+
+    function getWaitingTiles(handTiles, rule = 'TW16') {
+      const candidates = [];
+      for (const s of ['m', 'p', 's']) {
+        for (let i = 1; i <= 9; i++) candidates.push(`${i}${s}`);
+      }
+      for (let i = 1; i <= 7; i++) candidates.push(`${i}z`);
+
+      const waits = [];
+      for (const c of candidates) {
+        if (canWinStandard([...handTiles, c], rule)) {
+          waits.push(c);
+        }
+      }
+      return waits;
+    }
+
+    // ------------------------- 4. 三種規則台數 / 番數結算引擎 -------------------------
+    function evaluateWinScore(params) {
+      const {
+        rule, hand, melds, flowers, winTile, isSelfDraw,
+        isDealer, streak, seatWind, roundWind, isRiichi, doraIndicator
+      } = params;
+
+      const allTiles = [...hand, winTile];
+      melds.forEach(m => allTiles.push(...m.tiles));
+
+      const items = [];
+      let totalFan = 0;
+
+      const isMenqing = melds.every(m => m.type === 'angang');
+      const suitsUsed = new Set(allTiles.filter(t => !t.endsWith('z')).map(t => t[1]));
+      const hasHonors = allTiles.some(t => t.endsWith('z'));
+
+      if (rule === 'TW16') {
+        if (isDealer) {
+          items.push({ name: '莊家', fan: 1 });
+          if (streak > 0) items.push({ name: `連 ${streak} 拉 ${streak}`, fan: streak * 2 });
+        }
+        if (isMenqing && isSelfDraw) {
+          items.push({ name: '門清一摸三', fan: 3 });
+        } else {
+          if (isMenqing) items.push({ name: '門清', fan: 1 });
+          if (isSelfDraw) items.push({ name: '自摸', fan: 1 });
+        }
+
+        const counts = {};
+        allTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+        if ((counts['5z'] || 0) >= 3) items.push({ name: '紅中', fan: 1 });
+        if ((counts['6z'] || 0) >= 3) items.push({ name: '青發', fan: 1 });
+        if ((counts['7z'] || 0) >= 3) items.push({ name: '白板', fan: 1 });
+
+        const roundWindTile = `${roundWind + 1}z`;
+        const seatWindTile = `${seatWind + 1}z`;
+        if ((counts[roundWindTile] || 0) >= 3) items.push({ name: `圈風 (${WIND_LABELS[roundWind]})`, fan: 1 });
+        if ((counts[seatWindTile] || 0) >= 3) items.push({ name: `門風 (${WIND_LABELS[seatWind]})`, fan: 1 });
+
+        const ownFlowerA = `${seatWind + 1}f`;
+        const ownFlowerB = `${seatWind + 5}f`;
+        let flowerFan = 0;
+        flowers.forEach(f => {
+          if (f === ownFlowerA || f === ownFlowerB) flowerFan += 1;
+        });
+        if (flowerFan > 0) items.push({ name: '正花', fan: flowerFan });
+
+        if (suitsUsed.size === 1 && !hasHonors) {
+          items.push({ name: '清一色', fan: 8 });
+        } else if (suitsUsed.size === 1 && hasHonors) {
+          items.push({ name: '混一色', fan: 4 });
+        }
+
+        const isAllTriplets = Object.values(counts).filter(c => c >= 3).length === 5;
+        if (isAllTriplets) items.push({ name: '碰碰胡', fan: 4 });
+
+        if (items.length === 0) items.push({ name: '屁胡（基本胡）', fan: 1 });
+
+        totalFan = items.reduce((acc, cur) => acc + cur.fan, 0);
+        const basePoints = 300 + totalFan * 100;
+        return {
+          items,
+          unit: '台',
+          totalFan,
+          winPoints: isSelfDraw ? basePoints * 3 : basePoints
+        };
+      }
+
+      if (rule === 'JP13') {
+        if (isRiichi) items.push({ name: '立直 (Riichi)', fan: 1 });
+        if (isMenqing && isSelfDraw) items.push({ name: '門前清自摸和', fan: 1 });
+
+        const isTanyao = allTiles.every(t => {
+          if (t.endsWith('z')) return false;
+          const n = parseInt(t[0], 10);
+          return n >= 2 && n <= 8;
+        });
+        if (isTanyao) items.push({ name: '斷么九', fan: 1 });
+
+        const counts = {};
+        allTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+        if ((counts['5z'] || 0) >= 3) items.push({ name: '役牌：中', fan: 1 });
+        if ((counts['6z'] || 0) >= 3) items.push({ name: '役牌：發', fan: 1 });
+        if ((counts['7z'] || 0) >= 3) items.push({ name: '役牌：白', fan: 1 });
+        if ((counts[`${roundWind + 1}z`] || 0) >= 3) items.push({ name: '場風牌', fan: 1 });
+        if ((counts[`${seatWind + 1}z`] || 0) >= 3) items.push({ name: '自風牌', fan: 1 });
+
+        if (Object.values(counts).filter(c => c === 2).length === 7) {
+          items.push({ name: '七對子', fan: 2 });
+        } else if (Object.values(counts).filter(c => c >= 3).length === 4) {
+          items.push({ name: '對對和', fan: 2 });
+        }
+
+        if (suitsUsed.size === 1 && !hasHonors) {
+          items.push({ name: '清一色', fan: isMenqing ? 6 : 5 });
+        } else if (suitsUsed.size === 1 && hasHonors) {
+          items.push({ name: '混一色', fan: isMenqing ? 3 : 2 });
+        }
+
+        const doraTile = getNextDoraTile(doraIndicator);
+        const doraCount = counts[doraTile] || 0;
+        if (doraCount > 0) items.push({ name: `寶牌 (${doraTile})`, fan: doraCount });
+
+        if (items.length === 0) items.push({ name: '無役特殊和牌', fan: 1 });
+
+        totalFan = items.reduce((acc, cur) => acc + cur.fan, 0);
+        let pts = totalFan * 1000;
+        if (totalFan >= 5) pts = 8000;
+        if (totalFan >= 6) pts = 12000;
+        if (totalFan >= 8) pts = 16000;
+        if (isDealer) pts = Math.round(pts * 1.5);
+
+        return {
+          items,
+          unit: '番',
+          totalFan,
+          winPoints: pts
+        };
+      }
+
+      const counts = {};
+      allTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+      if (isSelfDraw) items.push({ name: '自摸', fan: 1 });
+      if (isMenqing) items.push({ name: '門前清', fan: 1 });
+      if ((counts['5z'] || 0) >= 3) items.push({ name: '紅中刻', fan: 1 });
+      if ((counts['6z'] || 0) >= 3) items.push({ name: '發財刻', fan: 1 });
+      if ((counts['7z'] || 0) >= 3) items.push({ name: '白板刻', fan: 1 });
+
+      const isAllTriplets = Object.values(counts).filter(c => c >= 3).length === 4;
+      if (isAllTriplets) items.push({ name: '碰碰胡', fan: 3 });
+
+      if (suitsUsed.size === 0 && hasHonors) {
+        items.push({ name: '字一色', fan: 10 });
+      } else if (suitsUsed.size === 1 && !hasHonors) {
+        items.push({ name: '清一色', fan: 7 });
+      } else if (suitsUsed.size === 1 && hasHonors) {
+        items.push({ name: '混一色', fan: 3 });
+      }
+
+      if (items.length === 0) items.push({ name: '雞胡', fan: 1 });
+      totalFan = items.reduce((acc, cur) => acc + cur.fan, 0);
+      const pts = Math.min(totalFan, 10) * 400;
+
+      return {
+        items,
+        unit: '番',
+        totalFan,
+        winPoints: pts
+      };
+    }
+
+    // ------------------------- 5. AI 性格決策與超時自動打好牌演算法 -------------------------
+    // aiLevel: 'feeder' (放槍王) | 'normal' (普通) | 'god' (麻將神)
+    const AI_LEVEL_META = {
+      feeder: { label: '🎁 放槍王', short: '放槍王', badgeCls: 'bg-pink-600/80 text-white' },
+      normal: { label: '🙂 普通', short: '普通', badgeCls: 'bg-sky-600/80 text-white' },
+      god:    { label: '👑 麻將神', short: '麻將神', badgeCls: 'bg-amber-500 text-stone-950' }
+    };
+
+    function chooseSmartDiscard(handTiles, rule, aiLevel = 'normal', gameContext = null) {
+      if (!handTiles || handTiles.length === 0) return null;
+
+      // 收集場上所有已出現的明牌與出牌河（用於計算安全牌與剩餘張數）
+      const visibleCounts = {};
+      if (gameContext && gameContext.players) {
+        gameContext.players.forEach(p => {
+          p.river.forEach(t => visibleCounts[t] = (visibleCounts[t] || 0) + 1);
+          p.melds.forEach(m => m.tiles.forEach(t => visibleCounts[t] = (visibleCounts[t] || 0) + 1));
+        });
+      }
+
+      // 1. 「放槍王」模式：優先打出真人玩家聽牌的牌（直接放槍），或拆掉自己的對子/搭子打出危險生張
+      if (aiLevel === 'feeder') {
+        if (gameContext && gameContext.players) {
+          for (const p of gameContext.players) {
+            if (!p.isAI) {
+              const humanWaits = getWaitingTiles(p.hand, rule);
+              const lethalTile = handTiles.find(t => humanWaits.includes(t));
+              if (lethalTile) return lethalTile; // 直接放槍給真人玩家！
+            }
+          }
+        }
+        // 若真人尚未聽牌，優先拆掉中張生張（場上完全沒出現過的 3~7 牌）
+        const dangerous = handTiles.find(t => {
+          const n = parseInt(t[0], 10);
+          return !t.endsWith('z') && n >= 3 && n <= 7 && (visibleCounts[t] || 0) === 0;
+        });
+        if (dangerous) return dangerous;
+        return handTiles[0];
+      }
+
+      // 2. 評估打出哪張牌可以「聽牌」（且計算聽牌總剩餘張數）
+      let bestTenpaiTile = null;
+      let bestTenpaiScore = -1;
+
+      for (let i = 0; i < handTiles.length; i++) {
+        const candidate = handTiles[i];
+        const rest = handTiles.filter((_, idx) => idx !== i);
+        const waits = getWaitingTiles(rest, rule);
+        if (waits.length > 0) {
+          // 麻將神會精算每張聽牌在牌牆中的實際剩餘枚數
+          const liveOuts = waits.reduce((sum, w) => sum + Math.max(0, 4 - (visibleCounts[w] || 0)), 0);
+          const score = aiLevel === 'god' ? liveOuts * 10 + waits.length : waits.length;
+          if (score > bestTenpaiScore) {
+            bestTenpaiScore = score;
+            bestTenpaiTile = candidate;
+          }
+        }
+      }
+      if (bestTenpaiTile) return bestTenpaiTile;
+
+      // 3. 計算每張牌的保留價值（順子潛力、刻子對子、以及「麻將神」的安全牌防放槍加權）
+      const counts = {};
+      handTiles.forEach(t => counts[t] = (counts[t] || 0) + 1);
+
+      let lowestScore = Infinity;
+      let discardCandidate = handTiles[handTiles.length - 1];
+
+      for (const tile of handTiles) {
+        let score = 0;
+        const c = counts[tile];
+        if (c >= 3) score += 14;
+        else if (c === 2) score += 7;
+
+        const suit = tile[1];
+        const num = parseInt(tile[0], 10);
+
+        if (suit === 'z') {
+          score += (num >= 5 ? 3 : 0.5);
+        } else {
+          if (counts[`${num - 1}${suit}`]) score += 4.5;
+          if (counts[`${num + 1}${suit}`]) score += 4.5;
+          if (counts[`${num - 2}${suit}`]) score += 2.2;
+          if (counts[`${num + 2}${suit}`]) score += 2.2;
+          if (num >= 3 && num <= 7) score += 2;
+        }
+
+        // 「麻將神」與「超時自動打好牌」：若該牌已在牌河出現過多次（熟張/現物），降低其保留分（優先安全打出）
+        if (aiLevel === 'god') {
+          const seen = visibleCounts[tile] || 0;
+          if (seen >= 2) score -= 3.5; // 熟張安全牌優先捨棄
+          else if (seen === 0 && !tile.endsWith('z') && num >= 3 && num <= 7) {
+            score += 3.0; // 中張生張容易放槍，扣留不輕易打出
+          }
+        }
+
+        if (score < lowestScore) {
+          lowestScore = score;
+          discardCandidate = tile;
+        }
+      }
+      return discardCandidate;
+    }
+
+    // ------------------------- 6. 全域連線與遊戲狀態管理 -------------------------
+    const appState = {
+      isHost: false,
+      myPeerId: '',
+      roomCode: '',
+      mySeat: 0,
+      myName: '玩家',
+      peer: null,
+      connections: {},
+      hostConn: null,
+
+      // 房主設定參數
+      shuffleMode: 'electric', // 'electric' (電動洗牌) | 'manual' (手動洗牌)
+      turnTimeoutSec: 12,      // 2 ~ 20 秒
+      tableTheme: 'emerald',   // 'emerald' | 'blue' | 'tatami' | 'walnut'
+      tileStyle: 'realistic',  // 'realistic' | 'traditional'
+
+      // 房間玩家清單 (4席)
+      seats: [
+        { seat: 0, name: '房主', isAI: false, aiLevel: 'normal', peerId: '', score: 10000 },
+        { seat: 1, name: 'AI 電腦 (南)', isAI: true, aiLevel: 'normal', peerId: '', score: 10000 },
+        { seat: 2, name: 'AI 電腦 (西)', isAI: true, aiLevel: 'normal', peerId: '', score: 10000 },
+        { seat: 3, name: 'AI 電腦 (北)', isAI: true, aiLevel: 'normal', peerId: '', score: 10000 }
+      ],
+
+      game: null,
+      selectedTileIndex: null,
+      aiTimer: null,
+      turnCountdownInterval: null,
+      turnDeadlineMs: 0
+    };
+
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let res = '';
+      for (let i = 0; i < 5; i++) res += chars[Math.floor(Math.random() * chars.length)];
+      return res;
+    }
+
+    function showLobbyToast(msg, isError = false) {
+      const el = document.getElementById('lobby-toast');
+      el.textContent = msg;
+      el.classList.remove('hidden', 'bg-amber-500/20', 'border-amber-400/40', 'text-amber-200', 'bg-red-500/20', 'border-red-400/40', 'text-red-200');
+      if (isError) {
+        el.classList.add('bg-red-500/20', 'border-red-400/40', 'text-red-200');
+      } else {
+        el.classList.add('bg-amber-500/20', 'border-amber-400/40', 'text-amber-200');
+      }
+    }
+
+    const RULE_DESCRIPTIONS = {
+      TW16: '起手 16 張、進牌 17 張，含春夏秋冬梅蘭菊竹 8 張花牌自動補花。超時未出牌自動由系統幫打好牌。',
+      JP13: '136 張牌（無花牌），起手 13 張、進牌 14 張。支援門清立直宣告、寶牌指示牌加番、七對子與振聽提示。',
+      GD13: '136 張牌（無花牌），起手 13 張、進牌 14 張。支援吃、碰、槓與經典廣東番數計算（雞胡、碰碰胡、混/清一色）。'
+    };
+
+    document.getElementById('rule-select').addEventListener('change', (e) => {
+      document.getElementById('rule-desc-box').textContent = RULE_DESCRIPTIONS[e.target.value];
+    });
+
+    // 大廳洗牌方式與出牌秒數滑桿同步
+    document.getElementById('shuffle-mode-select').addEventListener('change', (e) => {
+      appState.shuffleMode = e.target.value;
+      syncSettingsUI();
+    });
+
+    document.getElementById('lobby-timeout-range').addEventListener('input', (e) => {
+      const val = Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 12));
+      appState.turnTimeoutSec = val;
+      document.getElementById('lobby-timeout-val').textContent = val;
+      document.getElementById('modal-timeout-slider').value = val;
+      document.getElementById('modal-timeout-label').textContent = `${val} 秒`;
+    });
+
+    // 載入儲存的偏好與網址邀請房號
+    window.addEventListener('DOMContentLoaded', () => {
+      const savedName = localStorage.getItem('mj_player_name');
+      if (savedName) document.getElementById('player-name-input').value = savedName;
+
+      const params = new URLSearchParams(window.location.search);
+      const inviteRoom = params.get('room');
+      if (inviteRoom) {
+        document.getElementById('join-room-code-input').value = inviteRoom.toUpperCase();
+        showLobbyToast(`已自動填入邀請房號 ${inviteRoom.toUpperCase()}，請輸入暱稱後點擊「連線加入房間」！`);
+      }
+      syncSettingsUI();
+    });
+
+    // ------------------------- 7. 設定抽屜 UI 控制（主題 / 牌面 / 語音 / 音樂 / 限時） -------------------------
+    const openSettingsModal = () => {
+      syncSettingsUI();
+      document.getElementById('settings-modal').classList.remove('hidden');
+    };
+    document.getElementById('lobby-open-settings-btn').addEventListener('click', openSettingsModal);
+    document.getElementById('table-open-settings-btn').addEventListener('click', openSettingsModal);
+    document.getElementById('close-settings-btn').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.add('hidden');
+    });
+
+    // 桌面樣式切換
+    document.querySelectorAll('.theme-choice-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        appState.tableTheme = btn.dataset.theme;
+        applyTableThemeAndTileStyle();
+        syncSettingsUI();
+      });
+    });
+
+    // 牌面風格切換（擬真 vs 傳統）
+    document.getElementById('tile-style-realistic-btn').addEventListener('click', () => {
+      appState.tileStyle = 'realistic';
+      applyTableThemeAndTileStyle();
+      syncSettingsUI();
+    });
+    document.getElementById('tile-style-traditional-btn').addEventListener('click', () => {
+      appState.tileStyle = 'traditional';
+      applyTableThemeAndTileStyle();
+      syncSettingsUI();
+    });
+
+    function applyTableThemeAndTileStyle() {
+      const tableEl = document.getElementById('game-screen');
+      tableEl.classList.remove('theme-emerald', 'theme-blue', 'theme-tatami', 'theme-walnut');
+      tableEl.classList.add(`theme-${appState.tableTheme}`);
+
+      document.body.classList.remove('style-realistic', 'style-traditional');
+      document.body.classList.add(`style-${appState.tileStyle}`);
+    }
+
+    // 語音與音效音量 / 靜音控制
+    document.getElementById('voice-volume-slider').addEventListener('input', (e) => {
+      const pct = parseInt(e.target.value, 10);
+      sound.voiceVolume = pct / 100;
+      if (pct > 0) sound.voiceEnabled = true;
+      syncSettingsUI();
+    });
+
+    const toggleVoiceMute = () => {
+      sound.voiceEnabled = !sound.voiceEnabled;
+      syncSettingsUI();
+    };
+    document.getElementById('modal-voice-mute-btn').addEventListener('click', toggleVoiceMute);
+    document.getElementById('quick-voice-btn').addEventListener('click', toggleVoiceMute);
+
+    document.getElementById('test-voice-btn').addEventListener('click', () => {
+      sound.initContext();
+      sound.playWin('發財！自摸胡牌！');
+    });
+
+    // 背景音樂匯入、音量與靜音控制
+    document.getElementById('bgm-volume-slider').addEventListener('input', (e) => {
+      const pct = parseInt(e.target.value, 10);
+      sound.bgmVolume = pct / 100;
+      if (pct > 0) {
+        sound.bgmEnabled = true;
+        sound.startBgm();
+      } else {
+        sound.stopBgm();
+      }
+      syncSettingsUI();
+    });
+
+    const toggleBgmMute = () => {
+      sound.bgmEnabled = !sound.bgmEnabled;
+      if (sound.bgmEnabled) sound.startBgm();
+      else sound.stopBgm();
+      syncSettingsUI();
+    };
+    document.getElementById('modal-bgm-mute-btn').addEventListener('click', toggleBgmMute);
+    document.getElementById('quick-bgm-btn').addEventListener('click', toggleBgmMute);
+
+    document.getElementById('bgm-file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        sound.setCustomAudioFile(file);
+        document.getElementById('bgm-track-name').textContent = `目前曲目：${file.name}`;
+        syncSettingsUI();
+      }
+    });
+
+    document.getElementById('bgm-reset-default-btn').addEventListener('click', () => {
+      sound.resetToDefaultBgm();
+      document.getElementById('bgm-track-name').textContent = '目前曲目：內建東方雅韻背景音樂';
+      syncSettingsUI();
+    });
+
+    // 設定彈窗內的洗牌方式與出牌秒數同步
+    document.getElementById('modal-shuffle-electric').addEventListener('click', () => {
+      if (!appState.isHost && appState.game) return;
+      appState.shuffleMode = 'electric';
+      document.getElementById('shuffle-mode-select').value = 'electric';
+      if (appState.game) { appState.game.shuffleMode = 'electric'; broadcastGameState(); }
+      syncSettingsUI();
+    });
+
+    document.getElementById('modal-shuffle-manual').addEventListener('click', () => {
+      if (!appState.isHost && appState.game) return;
+      appState.shuffleMode = 'manual';
+      document.getElementById('shuffle-mode-select').value = 'manual';
+      if (appState.game) { appState.game.shuffleMode = 'manual'; broadcastGameState(); }
+      syncSettingsUI();
+    });
+
+    document.getElementById('modal-timeout-slider').addEventListener('input', (e) => {
+      const val = Math.max(2, Math.min(20, parseInt(e.target.value, 10) || 12));
+      appState.turnTimeoutSec = val;
+      document.getElementById('lobby-timeout-range').value = val;
+      document.getElementById('lobby-timeout-val').textContent = val;
+      if (appState.isHost && appState.game) {
+        appState.game.turnTimeoutSec = val;
+        broadcastGameState();
+      }
+      syncSettingsUI();
+    });
+
+    function syncSettingsUI() {
+      // 主題高亮
+      document.querySelectorAll('.theme-choice-btn').forEach(btn => {
+        if (btn.dataset.theme === appState.tableTheme) {
+          btn.classList.add('border-2', 'border-amber-400');
+          btn.classList.remove('border', 'border-stone-600');
+        } else {
+          btn.classList.remove('border-2', 'border-amber-400');
+          btn.classList.add('border', 'border-stone-600');
+        }
+      });
+
+      // 牌面風格高亮
+      const realBtn = document.getElementById('tile-style-realistic-btn');
+      const tradBtn = document.getElementById('tile-style-traditional-btn');
+      if (appState.tileStyle === 'realistic') {
+        realBtn.className = 'p-2.5 rounded-xl border-2 border-amber-400 bg-stone-900 text-left transition';
+        tradBtn.className = 'p-2.5 rounded-xl border border-stone-600 bg-stone-900 text-left transition';
+      } else {
+        tradBtn.className = 'p-2.5 rounded-xl border-2 border-amber-400 bg-stone-900 text-left transition';
+        realBtn.className = 'p-2.5 rounded-xl border border-stone-600 bg-stone-900 text-left transition';
+      }
+
+      // 語音音效狀態
+      const vPct = Math.round(sound.voiceVolume * 100);
+      document.getElementById('voice-volume-slider').value = vPct;
+      document.getElementById('voice-volume-label').textContent = `${vPct}%`;
+      const vMuted = !sound.voiceEnabled || vPct === 0;
+      document.getElementById('modal-voice-mute-btn').textContent = vMuted ? '🔇 已靜音' : '🔊 開啟中';
+      document.getElementById('modal-voice-mute-btn').className = vMuted
+        ? 'px-2.5 py-1 rounded-lg bg-red-800 text-red-100 text-xs font-bold'
+        : 'px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold';
+      document.getElementById('quick-voice-btn').textContent = vMuted ? '🔇 語音關' : '🗣️ 語音開';
+
+      // 音樂狀態
+      const bPct = Math.round(sound.bgmVolume * 100);
+      document.getElementById('bgm-volume-slider').value = bPct;
+      document.getElementById('bgm-volume-label').textContent = `${bPct}%`;
+      const bMuted = !sound.bgmEnabled || bPct === 0;
+      document.getElementById('modal-bgm-mute-btn').textContent = bMuted ? '🔇 已靜音' : '🎵 播放中';
+      document.getElementById('modal-bgm-mute-btn').className = bMuted
+        ? 'px-2.5 py-1 rounded-lg bg-red-800 text-red-100 text-xs font-bold'
+        : 'px-2.5 py-1 rounded-lg bg-emerald-700 text-white text-xs font-bold';
+      document.getElementById('quick-bgm-btn').textContent = bMuted ? '🔇 音樂關' : '🎵 音樂開';
+
+      // 洗牌與限時
+      const elBtn = document.getElementById('modal-shuffle-electric');
+      const mnBtn = document.getElementById('modal-shuffle-manual');
+      if (appState.shuffleMode === 'electric') {
+        elBtn.className = 'py-2 px-2 rounded-lg border-2 border-amber-400 bg-stone-900 text-amber-300 text-xs font-bold';
+        mnBtn.className = 'py-2 px-2 rounded-lg border border-stone-600 bg-stone-900 text-stone-300 text-xs font-bold';
+      } else {
+        mnBtn.className = 'py-2 px-2 rounded-lg border-2 border-amber-400 bg-stone-900 text-amber-300 text-xs font-bold';
+        elBtn.className = 'py-2 px-2 rounded-lg border border-stone-600 bg-stone-900 text-stone-300 text-xs font-bold';
+      }
+      document.getElementById('modal-timeout-slider').value = appState.turnTimeoutSec;
+      document.getElementById('modal-timeout-label').textContent = `${appState.turnTimeoutSec} 秒`;
+    }
+
+    // ------------------------- 8. PeerJS 連線與大廳邏輯 -------------------------
+    function getPlayerName() {
+      const raw = document.getElementById('player-name-input').value.trim();
+      const name = raw || `雀士${Math.floor(100 + Math.random() * 899)}`;
+      localStorage.setItem('mj_player_name', name);
+      return name;
+    }
+
+    // 房主開房
+    document.getElementById('create-room-btn').addEventListener('click', () => {
+      sound.initContext();
+      sound.startBgm();
+      appState.myName = getPlayerName();
+      appState.isHost = true;
+      appState.mySeat = 0;
+      const code = generateRoomCode();
+      appState.roomCode = code;
+
+      const initScore = document.getElementById('rule-select').value === 'JP13' ? 25000 : 10000;
+      const setupLocalHostSeats = (peerId = 'LOCAL_OFFLINE_HOST') => {
+        appState.myPeerId = peerId;
+        appState.seats = [
+          { seat: 0, name: appState.myName, isAI: false, aiLevel: 'normal', peerId, score: initScore },
+          { seat: 1, name: 'AI 電腦 (南)', isAI: true, aiLevel: 'normal', peerId: '', score: initScore },
+          { seat: 2, name: 'AI 電腦 (西)', isAI: true, aiLevel: 'normal', peerId: '', score: initScore },
+          { seat: 3, name: 'AI 電腦 (北)', isAI: true, aiLevel: 'normal', peerId: '', score: initScore }
+        ];
+      };
+
+      // 偵測是否在受限的預覽沙盒環境，或 PeerJS 無法使用 WebSocket
+      const isRestrictedSandbox = window.location.protocol === 'about:' || window.location.protocol === 'blob:' || typeof Peer === 'undefined';
+      if (isRestrictedSandbox) {
+        setupLocalHostSeats('LOCAL_OFFLINE_HOST');
+        enterWaitingRoomUI();
+        showLobbyToast(`已進入單機練習／AI 對戰模式（部署至 GitHub Pages 後自動啟用跨裝置多人連線）`);
+        return;
+      }
+
+      showLobbyToast('正在建立 P2P 牌桌連線...');
+      const peerId = `MJ_GH_${code}`;
+      let peer;
+      try {
+        peer = new Peer(peerId, { debug: 0 });
+      } catch (err) {
+        setupLocalHostSeats('LOCAL_OFFLINE_HOST');
+        enterWaitingRoomUI();
+        showLobbyToast(`目前環境不支援外部 WebSocket，已自動切換為本機 AI 對戰模式！`);
+        return;
+      }
+      appState.peer = peer;
+
+      peer.on('open', (id) => {
+        setupLocalHostSeats(id);
+        enterWaitingRoomUI();
+        showLobbyToast(`牌桌已建立！房號：${code}（可設定每位 AI 性格後按開局）`);
+      });
+
+      peer.on('connection', (conn) => {
+        conn.on('open', () => {
+          appState.connections[conn.peer] = conn;
+        });
+
+        conn.on('data', (msg) => {
+          handleHostReceiveData(conn, msg);
+        });
+
+        conn.on('close', () => {
+          delete appState.connections[conn.peer];
+          const seatObj = appState.seats.find(s => s.peerId === conn.peer);
+          if (seatObj) {
+            seatObj.isAI = true;
+            seatObj.aiLevel = 'normal';
+            seatObj.peerId = '';
+            seatObj.name = `AI (${seatObj.name})`;
+            broadcastLobbyState();
+            if (appState.game) {
+              broadcastGameState();
+              scheduleHostAITurn();
+            }
+          }
+        });
+      });
+
+      peer.on('error', (err) => {
+        // 若因預覽沙盒 (SecurityError / network) 無法連上外部信令伺服器，自動無縫降級為本機 AI 模式
+        if (!appState.myPeerId) {
+          try { peer.destroy(); } catch (e) {}
+          appState.peer = null;
+          setupLocalHostSeats('LOCAL_OFFLINE_HOST');
+          enterWaitingRoomUI();
+          showLobbyToast(`目前預覽環境限制外部連線，已自動切換為「本機 AI 對戰模式」，可直接開局！`);
+        } else {
+          showLobbyToast(`連線提示：${err.type || '已切換本機模式'}`, false);
+        }
+      });
+    });
+
+    // 訪客加入房間
+    document.getElementById('join-room-btn').addEventListener('click', () => {
+      const code = document.getElementById('join-room-code-input').value.trim().toUpperCase();
+      if (!code || code.length < 4) {
+        showLobbyToast('請輸入正確的房間代碼！', true);
+        return;
+      }
+
+      if (window.location.protocol === 'about:' || window.location.protocol === 'blob:' || typeof Peer === 'undefined') {
+        showLobbyToast('目前預覽沙盒環境不支援跨裝置連線，請使用左側「建立牌桌大廳」體驗完整 AI 對戰，或上傳至 GitHub Pages 連線！', true);
+        return;
+      }
+
+      sound.initContext();
+      sound.startBgm();
+      appState.myName = getPlayerName();
+      appState.isHost = false;
+      appState.roomCode = code;
+      showLobbyToast(`正在連線至房間 ${code}...`);
+
+      let peer;
+      try {
+        peer = new Peer({ debug: 0 });
+      } catch (err) {
+        showLobbyToast('目前環境限制 WebSocket 連線，請改用左側建立牌桌進行 AI 對戰！', true);
+        return;
+      }
+      appState.peer = peer;
+
+      peer.on('open', (id) => {
+        appState.myPeerId = id;
+        const conn = peer.connect(`MJ_GH_${code}`, { reliable: true });
+        appState.hostConn = conn;
+
+        conn.on('open', () => {
+          conn.send({
+            type: 'JOIN_REQUEST',
+            name: appState.myName,
+            peerId: id
+          });
+        });
+
+        conn.on('data', (msg) => {
+          handleGuestReceiveData(msg);
+        });
+
+        conn.on('close', () => {
+          showLobbyToast('與房主的連線已中斷。', true);
+          document.getElementById('game-screen').classList.add('hidden');
+          document.getElementById('lobby-screen').classList.remove('hidden');
+        });
+      });
+
+      peer.on('error', () => {
+        showLobbyToast(`無法連線至房號 ${code}（請確認房號或改用左側單機 AI 開局）`, true);
+      });
+    });
+
+    // 訪客加入房間
+    document.getElementById('join-room-btn').addEventListener('click', () => {
+      const code = document.getElementById('join-room-code-input').value.trim().toUpperCase();
+      if (!code || code.length < 4) {
+        showLobbyToast('請輸入正確的房間代碼！', true);
+        return;
+      }
+
+      sound.initContext();
+      sound.startBgm();
+      appState.myName = getPlayerName();
+      appState.isHost = false;
+      appState.roomCode = code;
+      showLobbyToast(`正在連線至房間 ${code}...`);
+
+      const peer = new Peer({ debug: 1 });
+      appState.peer = peer;
+
+      peer.on('open', (id) => {
+        appState.myPeerId = id;
+        const conn = peer.connect(`MJ_GH_${code}`, { reliable: true });
+        appState.hostConn = conn;
+
+        conn.on('open', () => {
+          conn.send({
+            type: 'JOIN_REQUEST',
+            name: appState.myName,
+            peerId: id
+          });
+        });
+
+        conn.on('data', (msg) => {
+          handleGuestReceiveData(msg);
+        });
+
+        conn.on('close', () => {
+          showLobbyToast('與房主的連線已中斷。', true);
+          document.getElementById('game-screen').classList.add('hidden');
+          document.getElementById('lobby-screen').classList.remove('hidden');
+        });
+      });
+
+      peer.on('error', () => {
+        showLobbyToast(`無法連線至房號 ${code}（請確認房號是否正確）`, true);
+      });
+    });
+
+    // 房主處理來自訪客的封包
+    function handleHostReceiveData(conn, msg) {
+      if (msg.type === 'JOIN_REQUEST') {
+        const emptySeat = appState.seats.find(s => s.isAI && s.seat !== 0);
+        if (!emptySeat || appState.game) {
+          conn.send({ type: 'JOIN_REJECTED', reason: appState.game ? '牌局已經開始了！' : '房間已滿 4 人！' });
+          return;
+        }
+        emptySeat.isAI = false;
+        emptySeat.name = msg.name;
+        emptySeat.peerId = msg.peerId;
+
+        conn.send({
+          type: 'JOIN_ACCEPTED',
+          assignedSeat: emptySeat.seat,
+          roomCode: appState.roomCode,
+          rule: document.getElementById('rule-select').value,
+          shuffleMode: appState.shuffleMode,
+          turnTimeoutSec: appState.turnTimeoutSec,
+          seats: appState.seats
+        });
+        broadcastLobbyState();
+      } else if (msg.type === 'PLAYER_ACTION') {
+        if (appState.game) {
+          processPlayerGameAction(msg.seat, msg.action);
+        }
+      }
+    }
+
+    // 訪客處理來自房主的封包
+    function handleGuestReceiveData(msg) {
+      if (msg.type === 'JOIN_REJECTED') {
+        showLobbyToast(msg.reason, true);
+      } else if (msg.type === 'JOIN_ACCEPTED') {
+        appState.mySeat = msg.assignedSeat;
+        appState.seats = msg.seats;
+        appState.shuffleMode = msg.shuffleMode || 'electric';
+        appState.turnTimeoutSec = msg.turnTimeoutSec || 12;
+        document.getElementById('rule-select').value = msg.rule;
+        enterWaitingRoomUI();
+        showLobbyToast(`成功加入牌桌！您被分配在「${WIND_LABELS[appState.mySeat]}風位」`);
+      } else if (msg.type === 'LOBBY_UPDATE') {
+        appState.seats = msg.seats;
+        appState.shuffleMode = msg.shuffleMode || 'electric';
+        appState.turnTimeoutSec = msg.turnTimeoutSec || 12;
+        document.getElementById('rule-select').value = msg.rule;
+        renderWaitingSeats();
+      } else if (msg.type === 'GAME_STATE_UPDATE') {
+        appState.game = msg.game;
+        appState.shuffleMode = msg.game.shuffleMode;
+        appState.turnTimeoutSec = msg.game.turnTimeoutSec;
+        if (msg.soundEvent === 'discard') sound.playDiscard(msg.soundTile);
+        if (msg.soundEvent === 'action') sound.playAction(msg.speechWord);
+        if (msg.soundEvent === 'win') sound.playWin(msg.speechWord);
+        if (msg.fxText) triggerActionFX(msg.fxText);
+        if (msg.triggerShuffleAnim) {
+          runAnimatedDealSequence(msg.game, false);
+        } else {
+          enterGameTableUI();
+          renderFullGameTable();
+          startLocalTurnCountdownUI();
+        }
+      }
+    }
+
+    // ------------------------- 8.5 等待室 UI 渲染、AI 性格設定與廣播 -------------------------
+    function enterWaitingRoomUI() {
+      document.getElementById('lobby-setup-panel').classList.add('hidden');
+      document.getElementById('waiting-room-panel').classList.remove('hidden');
+      document.getElementById('display-room-code').textContent = appState.roomCode;
+
+      const ruleMap = {
+        TW16: '🇹🇼 台灣 16 張麻將',
+        JP13: '🇯🇵 日本立直麻將',
+        GD13: '🇭🇰 廣東 13 張麻將'
+      };
+      document.getElementById('display-rule-badge').textContent = ruleMap[document.getElementById('rule-select').value] || '台灣 16 張麻將';
+
+      if (appState.isHost) {
+        document.getElementById('host-controls').classList.remove('hidden');
+        document.getElementById('host-ai-batch-bar').classList.remove('hidden');
+        document.getElementById('guest-waiting-msg').classList.add('hidden');
+      } else {
+        document.getElementById('host-controls').classList.add('hidden');
+        document.getElementById('host-ai-batch-bar').classList.add('hidden');
+        document.getElementById('guest-waiting-msg').classList.remove('hidden');
+      }
+      renderWaitingSeats();
+    }
+
+    function renderWaitingSeats() {
+      const grid = document.getElementById('waiting-seats-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      appState.seats.forEach((s, idx) => {
+        const card = document.createElement('div');
+        const isMe = idx === appState.mySeat;
+        card.className = `p-3 rounded-xl border ${isMe ? 'bg-emerald-950/70 border-amber-400' : 'bg-stone-900/90 border-stone-700'} flex flex-col justify-between`;
+
+        const aiMeta = AI_LEVEL_META[s.aiLevel || 'normal'];
+        let aiSelectorHTML = '';
+        if (s.isAI) {
+          if (appState.isHost) {
+            aiSelectorHTML = `
+              <select data-seat="${idx}" class="seat-ai-select mt-2 w-full px-2 py-1 rounded bg-stone-800 border border-stone-600 text-xs text-amber-200 font-bold focus:outline-none">
+                <option value="feeder" ${s.aiLevel === 'feeder' ? 'selected' : ''}>🎁 放槍王</option>
+                <option value="normal" ${s.aiLevel === 'normal' ? 'selected' : ''}>🙂 普通</option>
+                <option value="god" ${s.aiLevel === 'god' ? 'selected' : ''}>👑 麻將神</option>
+              </select>
+            `;
+          } else {
+            aiSelectorHTML = `<span class="mt-2 inline-block px-2 py-0.5 rounded text-[11px] font-bold ${aiMeta.badgeCls}">${aiMeta.label}</span>`;
+          }
+        } else {
+          aiSelectorHTML = `<span class="mt-2 inline-block px-2 py-0.5 rounded bg-emerald-700/70 text-emerald-100 text-[11px] font-bold">👤 真人玩家</span>`;
+        }
+
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="font-black text-amber-400">${WIND_LABELS[idx]}風位${idx === 0 ? ' (房主)' : ''}</span>
+              ${isMe ? '<span class="text-[10px] px-1.5 rounded bg-amber-400 text-stone-950 font-black">你</span>' : ''}
+            </div>
+            <div class="text-sm font-bold text-white truncate">${s.name}</div>
+          </div>
+          <div>${aiSelectorHTML}</div>
+        `;
+        grid.appendChild(card);
+      });
+
+      if (appState.isHost) {
+        document.querySelectorAll('.seat-ai-select').forEach(sel => {
+          sel.addEventListener('change', (e) => {
+            const seatIdx = parseInt(e.target.dataset.seat, 10);
+            const lvl = e.target.value;
+            appState.seats[seatIdx].aiLevel = lvl;
+            appState.seats[seatIdx].name = `AI ${AI_LEVEL_META[lvl].short} (${WIND_LABELS[seatIdx]})`;
+            renderWaitingSeats();
+            broadcastLobbyState();
+          });
+        });
+      }
+    }
+
+    function broadcastLobbyState() {
+      if (!appState.isHost) return;
+      const payload = {
+        type: 'LOBBY_UPDATE',
+        seats: appState.seats,
+        rule: document.getElementById('rule-select').value,
+        shuffleMode: appState.shuffleMode,
+        turnTimeoutSec: appState.turnTimeoutSec
+      };
+      Object.values(appState.connections).forEach(conn => {
+        if (conn.open) conn.send(payload);
+      });
+    }
+
+    function broadcastGameState(soundEvent = null, fxText = null, soundTile = null, speechWord = null) {
+      if (!appState.game) return;
+      if (soundEvent === 'discard') sound.playDiscard(soundTile);
+      if (soundEvent === 'action') sound.playAction(speechWord);
+      if (soundEvent === 'win') sound.playWin(speechWord);
+      if (fxText) triggerActionFX(fxText);
+
+      renderFullGameTable();
+      startLocalTurnCountdownUI();
+
+      if (appState.isHost) {
+        const payload = {
+          type: 'GAME_STATE_UPDATE',
+          game: appState.game,
+          soundEvent,
+          soundTile,
+          speechWord,
+          fxText,
+          triggerShuffleAnim: false
+        };
+        Object.values(appState.connections).forEach(conn => {
+          if (conn.open) conn.send(payload);
+        });
+      }
+    }
+
+    // 房主一鍵套用所有 AI 性格
+    document.querySelectorAll('.batch-ai-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!appState.isHost) return;
+        const lvl = btn.dataset.batchAi;
+        appState.seats.forEach((s, idx) => {
+          if (s.isAI) {
+            s.aiLevel = lvl;
+            s.name = `AI ${AI_LEVEL_META[lvl].short} (${WIND_LABELS[idx]})`;
+          }
+        });
+        renderWaitingSeats();
+        broadcastLobbyState();
+      });
+    });
+
+    // 複製邀請網址（使用相容 iFrame 的 execCommand('copy')）
+    document.getElementById('copy-invite-btn').addEventListener('click', () => {
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', appState.roomCode);
+      const inviteUrl = url.toString();
+
+      const tempInput = document.createElement('input');
+      tempInput.value = inviteUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      try {
+        document.execCommand('copy');
+        showLobbyToast(`✅ 已複製邀請網址！房號：${appState.roomCode}`);
+      } catch (e) {
+        showLobbyToast(`房間代碼：${appState.roomCode}（請手動分享網址）`);
+      }
+      document.body.removeChild(tempInput);
+    });
+
+    // 開局、再來一局與離開房間按鈕事件
+    document.getElementById('start-game-btn').addEventListener('click', () => {
+      if (!appState.isHost) return;
+      startNewMatch(true);
+    });
+
+    document.getElementById('next-round-btn').addEventListener('click', () => {
+      if (!appState.isHost) return;
+      document.getElementById('round-result-modal').classList.add('hidden');
+      startNewMatch(false);
+    });
+
+    const resetToLobby = () => {
+      clearTimeout(appState.aiTimer);
+      clearInterval(appState.turnCountdownInterval);
+      if (appState.peer) {
+        try { appState.peer.destroy(); } catch (e) {}
+        appState.peer = null;
+      }
+      appState.connections = {};
+      appState.hostConn = null;
+      appState.game = null;
+      appState.isHost = false;
+      document.getElementById('game-screen').classList.add('hidden');
+      document.getElementById('round-result-modal').classList.add('hidden');
+      document.getElementById('lobby-screen').classList.remove('hidden');
+      document.getElementById('waiting-room-panel').classList.add('hidden');
+      document.getElementById('lobby-setup-panel').classList.remove('hidden');
+    };
+
+    document.getElementById('leave-room-btn').addEventListener('click', resetToLobby);
+    document.getElementById('guest-leave-btn').addEventListener('click', resetToLobby);
+    document.getElementById('back-to-lobby-btn').addEventListener('click', resetToLobby);
+
+    // ------------------------- 9. 牌堆建立、洗牌與階段式發牌動畫 -------------------------
+    function buildDeck(rule) {
+      const deck = [];
+      for (const suit of ['m', 'p', 's']) {
+        for (let n = 1; n <= 9; n++) {
+          for (let c = 0; c < 4; c++) deck.push(`${n}${suit}`);
+        }
+      }
+      for (let z = 1; z <= 7; z++) {
+        for (let c = 0; c < 4; c++) deck.push(`${z}z`);
+      }
+      // 台灣16張與廣東13張加入春夏秋冬梅蘭菊竹8張花牌；日本立直無花牌
+      if (rule === 'TW16' || rule === 'GD13') {
+        for (let f = 1; f <= 8; f++) deck.push(`${f}f`);
+      }
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      return deck;
+    }
+
+    // 播放電動洗牌或手動洗牌視覺與音效
+    function playShuffleVisualEffect(mode, diceRoll) {
+      const overlay = document.getElementById('shuffle-visual-overlay');
+      const box = document.getElementById('shuffle-visual-box');
+      const icon = document.getElementById('shuffle-visual-icon');
+      const title = document.getElementById('shuffle-visual-title');
+      const sub = document.getElementById('shuffle-visual-sub');
+
+      overlay.classList.remove('hidden');
+      box.classList.remove('animate-elevator', 'animate-scramble');
+
+      if (mode === 'electric') {
+        sound.playElectricShuffle();
+        sound.speak('電動洗牌，升牌開局');
+        icon.textContent = '⚡🀄⚡';
+        title.textContent = '電動麻將桌・磁力升牌中';
+        sub.textContent = '雙層升降台自動理牌就緒';
+        box.classList.add('animate-elevator');
+      } else {
+        sound.playManualShuffle();
+        sound.speak(`手動洗牌，擲骰子${diceRoll}點開門`);
+        icon.textContent = '👐🎲';
+        title.textContent = `傳統手搓洗牌・擲骰 ${diceRoll} 點`;
+        sub.textContent = '手工堆疊牌牆・開門配牌中';
+        box.classList.add('animate-scramble');
+      }
+    }
+
+    // ==================== 階段式發牌動畫與開局補花序列 ====================
+    function runAnimatedDealSequence(gameObj, isHostRole) {
+      enterGameTableUI();
+      appState.isDealingAnim = true;
+      appState.dealRevealCounts = [0, 0, 0, 0];
+      appState.dealHideFlowers = true;
+      clearInterval(appState.turnCountdownInterval);
+
+      const overlay = document.getElementById('shuffle-visual-overlay');
+      const icon = document.getElementById('shuffle-visual-icon');
+      const title = document.getElementById('shuffle-visual-title');
+      const sub = document.getElementById('shuffle-visual-sub');
+
+      // 第 1 階段：洗牌升牌動畫 (950ms)
+      playShuffleVisualEffect(gameObj.shuffleMode, gameObj.diceRoll);
+      renderFullGameTable();
+
+      setTimeout(() => {
+        // 第 2 階段：東→南→西→北 4輪分批發牌動畫（每輪每人4張）
+        icon.textContent = '🀄💨';
+        title.textContent = '開門發牌中...';
+        sub.textContent = '依序配發四家起手牌';
+
+        const totalRounds = 4;
+        let step = 0;
+        const dealSteps = [];
+        for (let r = 0; r < totalRounds; r++) {
+          for (let offset = 0; offset < 4; offset++) {
+            const seat = (gameObj.dealerSeat + offset) % 4;
+            dealSteps.push({ seat, add: 4 });
+          }
+        }
+        // 莊家開門多摸第 17（或第 14）張
+        dealSteps.push({ seat: gameObj.dealerSeat, add: 1 });
+
+        const stepInterval = setInterval(() => {
+          if (step < dealSteps.length) {
+            const cur = dealSteps[step];
+            const maxHand = gameObj.players[cur.seat].hand.length;
+            appState.dealRevealCounts[cur.seat] = Math.min(maxHand, appState.dealRevealCounts[cur.seat] + cur.add);
+            sound.playDealTick();
+            renderFullGameTable();
+            step++;
+          } else {
+            clearInterval(stepInterval);
+            overlay.classList.add('hidden');
+            appState.isDealingAnim = false;
+            appState.dealRevealCounts = null;
+            appState.dealHideFlowers = false;
+
+            // 第 3 階段：亮出開局補花動畫與語音提示
+            const totalFlowersDealt = gameObj.players.reduce((sum, p) => sum + p.flowers.length, 0);
+            if (totalFlowersDealt > 0) {
+              triggerActionFX(`🌸 開局補花 (${totalFlowersDealt}張)！`);
+              sound.playAction('補花！');
+            }
+
+            renderFullGameTable();
+            startLocalTurnCountdownUI();
+            if (isHostRole) {
+              scheduleHostAITurn();
+            }
+          }
+        }, 95);
+      }, 950);
+    }
+
+    function startNewMatch(isFirstMatch) {
+      const rule = document.getElementById('rule-select').value;
+      const deck = buildDeck(rule);
+      const handSize = rule === 'TW16' ? 16 : 13;
+
+      let dealerSeat = 0;
+      let streak = 0;
+      let roundWind = 0;
+
+      if (!isFirstMatch && appState.game) {
+        const prev = appState.game;
+        if (prev.lastWinnerSeat === prev.dealerSeat) {
+          dealerSeat = prev.dealerSeat;
+          streak = prev.streak + 1;
+          roundWind = prev.roundWind;
+        } else {
+          dealerSeat = (prev.dealerSeat + 1) % 4;
+          streak = 0;
+          roundWind = dealerSeat === 0 ? (prev.roundWind + 1) % 4 : prev.roundWind;
+        }
+      }
+
+      const doraIndicator = rule === 'JP13' ? deck.pop() : null;
+      const diceRoll = (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1) + (Math.floor(Math.random() * 6) + 1);
+
+      const players = appState.seats.map((s, idx) => ({
+        seat: idx,
+        name: s.name,
+        isAI: s.isAI,
+        aiLevel: s.aiLevel || 'normal',
+        score: s.score,
+        hand: [],
+        melds: [],
+        flowers: [],
+        river: [],
+        isRiichi: false,
+        furiten: false
+      }));
+
+      for (let p = 0; p < 4; p++) {
+        for (let k = 0; k < handSize; k++) {
+          players[p].hand.push(deck.pop());
+        }
+      }
+
+      players[dealerSeat].hand.push(deck.pop());
+
+      // 台灣16張與廣東13張起手花牌自動從牌尾補花
+      if (rule === 'TW16' || rule === 'GD13') {
+        for (let p = 0; p < 4; p++) {
+          replaceFlowersForPlayer(players[p], deck);
+        }
+      }
+
+      for (let p = 0; p < 4; p++) {
+        if (p === dealerSeat) {
+          const drawn = players[p].hand.pop();
+          players[p].hand = [...sortTiles(players[p].hand), drawn];
+        } else {
+          players[p].hand = sortTiles(players[p].hand);
+        }
+      }
+
+      appState.game = {
+        rule,
+        shuffleMode: appState.shuffleMode,
+        turnTimeoutSec: appState.turnTimeoutSec,
+        diceRoll,
+        deck,
+        players,
+        dealerSeat,
+        streak,
+        roundWind,
+        turnSeat: dealerSeat,
+        phase: 'DISCARD',
+        lastDiscard: null,
+        pendingClaims: {},
+        doraIndicator,
+        resultData: null
+      };
+
+      // 先廣播給所有連線玩家同步啟動洗牌與發牌動畫
+      const payload = {
+        type: 'GAME_STATE_UPDATE',
+        game: appState.game,
+        soundEvent: null,
+        soundTile: null,
+        speechWord: null,
+        fxText: null,
+        triggerShuffleAnim: true
+      };
+      Object.values(appState.connections).forEach(c => {
+        if (c.open) c.send(payload);
+      });
+
+      runAnimatedDealSequence(appState.game, true);
+    }
+
+    function replaceFlowersForPlayer(player, deck) {
+      let replacedCount = 0;
+      let hasFlower = true;
+      while (hasFlower && deck.length > 0) {
+        hasFlower = false;
+        for (let i = player.hand.length - 1; i >= 0; i--) {
+          if (isFlower(player.hand[i])) {
+            const fl = player.hand.splice(i, 1)[0];
+            player.flowers.push(fl);
+            replacedCount++;
+            if (deck.length > 0) {
+              player.hand.push(deck.pop());
+              hasFlower = true;
+            }
+          }
+        }
+      }
+      return replacedCount;
+    }
+
+    // ------------------------- 10. 出牌倒數計時器（2~20秒）與超時自動打好牌 -------------------------
+    function startLocalTurnCountdownUI() {
+      clearInterval(appState.turnCountdownInterval);
+      const g = appState.game;
+      const timerTextEl = document.getElementById('turn-timer-display');
+      const timerBarEl = document.getElementById('turn-timer-bar');
+
+      if (!g || g.phase === 'ROUND_OVER') {
+        timerTextEl.textContent = '--';
+        timerBarEl.style.width = '0%';
+        return;
+      }
+
+      const maxSec = g.turnTimeoutSec || appState.turnTimeoutSec || 12;
+      appState.turnDeadlineMs = Date.now() + maxSec * 1000;
+
+      const updateTick = () => {
+        const remainMs = Math.max(0, appState.turnDeadlineMs - Date.now());
+        const remainSec = Math.ceil(remainMs / 1000);
+        const pct = Math.max(0, Math.min(100, (remainMs / (maxSec * 1000)) * 100));
+
+        timerTextEl.textContent = `${remainSec}s`;
+        timerBarEl.style.width = `${pct}%`;
+
+        if (remainSec <= 3) {
+          timerTextEl.className = 'text-base sm:text-xl font-mono font-black text-red-400 animate-ping leading-tight my-0.5';
+          timerBarEl.className = 'h-full bg-red-500 transition-all duration-150';
+        } else {
+          timerTextEl.className = 'text-base sm:text-xl font-mono font-black text-white leading-tight my-0.5';
+          timerBarEl.className = 'h-full bg-emerald-400 transition-all duration-150';
+        }
+
+        // 超過設定秒數未打出，由 Host 自動觸發代打好牌！
+        if (remainMs <= 0) {
+          clearInterval(appState.turnCountdownInterval);
+          if (appState.isHost) {
+            handleHostTurnTimeout();
+          }
+        }
+      };
+
+      updateTick();
+      appState.turnCountdownInterval = setInterval(updateTick, 200);
+    }
+
+    // Host 處理回合超時：自動幫玩家打出最不影響聽牌與進張的安全好牌
+    function handleHostTurnTimeout() {
+      const g = appState.game;
+      if (!g || g.phase === 'ROUND_OVER') return;
+
+      if (g.phase === 'DISCARD') {
+        const seat = g.turnSeat;
+        const player = g.players[seat];
+        if (!player || player.hand.length === 0) return;
+
+        // 若超時前已經自摸可胡，或直接挑一張最安全的「麻將神級別好牌」自動打出
+        const goodTile = player.isRiichi
+          ? player.hand[player.hand.length - 1]
+          : chooseSmartDiscard(player.hand, g.rule, 'god', g);
+
+        if (seat === appState.mySeat) appState.selectedTileIndex = null;
+        processPlayerGameAction(seat, { type: 'DISCARD', tile: goodTile, isAutoTimeout: true });
+      } else if (g.phase === 'CLAIM') {
+        // 等待吃碰槓胡回應超時：自動幫所有尚未回應的玩家「過」
+        const pendingSeats = Object.keys(g.pendingClaims).map(Number);
+        for (const s of pendingSeats) {
+          processPlayerGameAction(s, { type: 'PASS' });
+        }
+      }
+    }
+
+    // ------------------------- 11. 核心回合輪轉與吃碰槓胡判定 -------------------------
+    function sendPlayerAction(action) {
+      if (appState.isHost) {
+        processPlayerGameAction(appState.mySeat, action);
+      } else if (appState.hostConn && appState.hostConn.open) {
+        appState.hostConn.send({
+          type: 'PLAYER_ACTION',
+          seat: appState.mySeat,
+          action
+        });
+      }
+    }
+
+    function processPlayerGameAction(seat, action) {
+      const g = appState.game;
+      if (!g || g.phase === 'ROUND_OVER') return;
+
+      // 1. 出牌階段
+      if (action.type === 'DISCARD' && g.phase === 'DISCARD' && g.turnSeat === seat) {
+        const player = g.players[seat];
+        const idx = player.hand.indexOf(action.tile);
+        if (idx === -1) return;
+
+        if (action.riichi && g.rule === 'JP13' && !player.isRiichi) {
+          player.isRiichi = true;
+          player.score -= 1000;
+        }
+
+        player.hand.splice(idx, 1);
+        player.hand = sortTiles(player.hand);
+        player.river.push(action.tile);
+        g.lastDiscard = { tile: action.tile, fromSeat: seat };
+
+        if (g.rule === 'JP13') {
+          const waits = getWaitingTiles(player.hand, 'JP13');
+          player.furiten = waits.some(w => player.river.includes(w));
+        }
+
+        const fxLabel = action.riichi ? '立直！' : (action.isAutoTimeout ? '超時自動代打' : null);
+        const claims = evaluateClaimsForDiscard(action.tile, seat);
+        if (Object.keys(claims).length > 0) {
+          g.phase = 'CLAIM';
+          g.pendingClaims = claims;
+          broadcastGameState('discard', fxLabel, action.tile);
+          scheduleHostAITurn();
+        } else {
+          advanceToNextDraw((seat + 1) % 4, 'discard', action.tile, fxLabel);
+        }
+        return;
+      }
+
+      // 2. 自摸胡牌
+      if (action.type === 'SELF_WIN' && g.phase === 'DISCARD' && g.turnSeat === seat) {
+        const player = g.players[seat];
+        const winTile = player.hand[player.hand.length - 1];
+        const baseHand = player.hand.slice(0, -1);
+        if (canWinStandard([...baseHand, winTile], g.rule)) {
+          finalizeRoundWin(seat, seat, winTile, true);
+        }
+        return;
+      }
+
+      // 3. 暗槓 / 加槓
+      if ((action.type === 'ANGANG' || action.type === 'JIAGANG') && g.phase === 'DISCARD' && g.turnSeat === seat) {
+        const player = g.players[seat];
+        const tile = action.tile;
+        if (action.type === 'ANGANG') {
+          let removed = 0;
+          player.hand = player.hand.filter(t => {
+            if (t === tile && removed < 4) { removed++; return false; }
+            return true;
+          });
+          player.melds.push({ type: 'angang', tiles: [tile, tile, tile, tile] });
+        } else {
+          const idx = player.hand.indexOf(tile);
+          if (idx !== -1) player.hand.splice(idx, 1);
+          const meld = player.melds.find(m => m.type === 'pon' && m.tiles[0] === tile);
+          if (meld) {
+            meld.type = 'gang';
+            meld.tiles.push(tile);
+          }
+        }
+        drawTileForPlayer(seat, 'action', '槓！', null, '槓');
+        return;
+      }
+
+      // 4. 回應他家棄牌（胡 / 槓 / 碰 / 吃 / 過）
+      if (g.phase === 'CLAIM' && g.pendingClaims[seat]) {
+        if (action.type === 'PASS') {
+          delete g.pendingClaims[seat];
+          if (Object.keys(g.pendingClaims).length === 0) {
+            advanceToNextDraw((g.lastDiscard.fromSeat + 1) % 4);
+          } else {
+            broadcastGameState();
+            scheduleHostAITurn();
+          }
+          return;
+        }
+
+        if (action.type === 'CLAIM_HU' && g.pendingClaims[seat].includes('hu')) {
+          const { tile, fromSeat } = g.lastDiscard;
+          finalizeRoundWin(seat, fromSeat, tile, false);
+          return;
+        }
+
+        if (action.type === 'CLAIM_GANG' && g.pendingClaims[seat].includes('gang')) {
+          const { tile, fromSeat } = g.lastDiscard;
+          g.players[fromSeat].river.pop();
+          const player = g.players[seat];
+          let removed = 0;
+          player.hand = player.hand.filter(t => {
+            if (t === tile && removed < 3) { removed++; return false; }
+            return true;
+          });
+          player.melds.push({ type: 'gang', tiles: [tile, tile, tile, tile] });
+          g.pendingClaims = {};
+          drawTileForPlayer(seat, 'action', '明槓！', null, '槓');
+          return;
+        }
+
+        if (action.type === 'CLAIM_PON' && g.pendingClaims[seat].includes('pon')) {
+          const { tile, fromSeat } = g.lastDiscard;
+          g.players[fromSeat].river.pop();
+          const player = g.players[seat];
+          let removed = 0;
+          player.hand = player.hand.filter(t => {
+            if (t === tile && removed < 2) { removed++; return false; }
+            return true;
+          });
+          player.melds.push({ type: 'pon', tiles: [tile, tile, tile] });
+          g.pendingClaims = {};
+          g.phase = 'DISCARD';
+          g.turnSeat = seat;
+          broadcastGameState('action', '碰！', null, '碰');
+          scheduleHostAITurn();
+          return;
+        }
+
+        if (action.type === 'CLAIM_CHI' && g.pendingClaims[seat].includes('chi')) {
+          const othersHaveHigher = Object.entries(g.pendingClaims).some(
+            ([s, acts]) => Number(s) !== seat && (acts.includes('hu') || acts.includes('pon') || acts.includes('gang'))
+          );
+          if (othersHaveHigher) return;
+
+          const { tile, fromSeat } = g.lastDiscard;
+          const combo = action.combo;
+          g.players[fromSeat].river.pop();
+          const player = g.players[seat];
+          for (const needTile of combo) {
+            const idx = player.hand.indexOf(needTile);
+            if (idx !== -1) player.hand.splice(idx, 1);
+          }
+          const meldTiles = sortTiles([...combo, tile]);
+          player.melds.push({ type: 'chi', tiles: meldTiles });
+          g.pendingClaims = {};
+          g.phase = 'DISCARD';
+          g.turnSeat = seat;
+          broadcastGameState('action', '吃！', null, '吃');
+          scheduleHostAITurn();
+        }
+      }
+    }
+
+    function evaluateClaimsForDiscard(tile, fromSeat) {
+      const g = appState.game;
+      const claims = {};
+      const nextSeat = (fromSeat + 1) % 4;
+
+      for (let offset = 1; offset <= 3; offset++) {
+        const s = (fromSeat + offset) % 4;
+        const p = g.players[s];
+        const acts = [];
+
+        if (!(g.rule === 'JP13' && p.furiten)) {
+          if (canWinStandard([...p.hand, tile], g.rule)) {
+            acts.push('hu');
+          }
+        }
+
+        if (!p.isRiichi) {
+          const sameCount = p.hand.filter(t => t === tile).length;
+          if (sameCount >= 3) acts.push('gang');
+          if (sameCount >= 2) acts.push('pon');
+
+          if (s === nextSeat && getChiCombinations(p.hand, tile).length > 0) {
+            acts.push('chi');
+          }
+        }
+
+        if (acts.length > 0) claims[s] = acts;
+      }
+      return claims;
+    }
+
+    function getChiCombinations(hand, discardTile) {
+      const suit = discardTile[1];
+      if (suit !== 'm' && suit !== 'p' && suit !== 's') return [];
+      const n = parseInt(discardTile[0], 10);
+      const combos = [];
+      const has = (t) => hand.includes(t);
+
+      if (n >= 3 && has(`${n - 2}${suit}`) && has(`${n - 1}${suit}`)) {
+        combos.push([`${n - 2}${suit}`, `${n - 1}${suit}`]);
+      }
+      if (n >= 2 && n <= 8 && has(`${n - 1}${suit}`) && has(`${n + 1}${suit}`)) {
+        combos.push([`${n - 1}${suit}`, `${n + 1}${suit}`]);
+      }
+      if (n <= 7 && has(`${n + 1}${suit}`) && has(`${n + 2}${suit}`)) {
+        combos.push([`${n + 1}${suit}`, `${n + 2}${suit}`]);
+      }
+      return combos;
+    }
+
+    function advanceToNextDraw(nextSeat, prevSound = null, prevTile = null, prevFx = null) {
+      drawTileForPlayer(nextSeat, prevSound, prevFx, prevTile, null);
+    }
+
+    function drawTileForPlayer(seat, soundEvent = null, fxText = null, soundTile = null, speechWord = null) {
+      const g = appState.game;
+      const minWall = g.rule === 'TW16' ? 16 : 14;
+      if (g.deck.length <= minWall) {
+        finalizeRoundDraw();
+        return;
+      }
+
+      const player = g.players[seat];
+      const drawn = g.deck.pop();
+      player.hand.push(drawn);
+
+      let flowerReplaced = 0;
+      if ((g.rule === 'TW16' || g.rule === 'GD13') && isFlower(drawn)) {
+        flowerReplaced = replaceFlowersForPlayer(player, g.deck);
+      }
+
+      if (player.hand.length > 1) {
+        const lastTile = player.hand.pop();
+        player.hand = [...sortTiles(player.hand), lastTile];
+      }
+
+      g.turnSeat = seat;
+      g.phase = 'DISCARD';
+      g.pendingClaims = {};
+
+      if (flowerReplaced > 0) {
+        broadcastGameState('action', `🌸 ${player.name} 補花！`, null, '補花');
+      } else {
+        broadcastGameState(soundEvent, fxText, soundTile, speechWord);
+      }
+      scheduleHostAITurn();
+    }
+
+    function finalizeRoundWin(winnerSeat, loserSeat, winTile, isSelfDraw) {
+      const g = appState.game;
+      const winner = g.players[winnerSeat];
+      const baseHand = isSelfDraw ? winner.hand.slice(0, -1) : [...winner.hand];
+
+      const evalRes = evaluateWinScore({
+        rule: g.rule,
+        hand: baseHand,
+        melds: winner.melds,
+        flowers: winner.flowers,
+        winTile,
+        isSelfDraw,
+        isDealer: winnerSeat === g.dealerSeat,
+        streak: g.streak,
+        seatWind: winnerSeat,
+        roundWind: g.roundWind,
+        isRiichi: winner.isRiichi,
+        doraIndicator: g.doraIndicator
+      });
+
+      if (isSelfDraw) {
+        const eachPay = Math.round(evalRes.winPoints / 3);
+        for (let s = 0; s < 4; s++) {
+          if (s === winnerSeat) {
+            g.players[s].score += eachPay * 3;
+          } else {
+            g.players[s].score -= eachPay;
+          }
+        }
+      } else {
+        g.players[winnerSeat].score += evalRes.winPoints;
+        g.players[loserSeat].score -= evalRes.winPoints;
+      }
+
+      g.players.forEach((p, idx) => { appState.seats[idx].score = p.score; });
+
+      g.phase = 'ROUND_OVER';
+      g.lastWinnerSeat = winnerSeat;
+      g.resultData = {
+        isDraw: false,
+        winnerSeat,
+        loserSeat,
+        isSelfDraw,
+        winTile,
+        fullHand: sortTiles([...baseHand, winTile]),
+        melds: winner.melds,
+        evalRes
+      };
+
+      const winWord = isSelfDraw ? '自摸胡牌！' : '胡牌！';
+      broadcastGameState('win', winWord, null, winWord);
+    }
+
+    function finalizeRoundDraw() {
+      const g = appState.game;
+      g.phase = 'ROUND_OVER';
+      g.lastWinnerSeat = g.dealerSeat;
+      g.resultData = { isDraw: true };
+      broadcastGameState('action', '流局！', null, '流局');
+    }
+
+    // ------------------------- 12. Host 端 AI 性格差異化排程 -------------------------
+    function scheduleHostAITurn() {
+      if (!appState.isHost || !appState.game || appState.game.phase === 'ROUND_OVER') return;
+      clearTimeout(appState.aiTimer);
+
+      const g = appState.game;
+
+      // 情況 A：等待他家吃碰槓胡回應
+      if (g.phase === 'CLAIM') {
+        const aiClaimSeats = Object.keys(g.pendingClaims)
+          .map(Number)
+          .filter(s => g.players[s].isAI);
+
+        if (aiClaimSeats.length > 0) {
+          appState.aiTimer = setTimeout(() => {
+            for (const s of aiClaimSeats) {
+              const acts = g.pendingClaims[s];
+              const aiLevel = g.players[s].aiLevel || 'normal';
+              if (!acts) continue;
+
+              // 「放槍王」故意不胡牌（50%放過胡牌機會）且喜歡亂吃亂碰破壞手牌
+              if (acts.includes('hu')) {
+                if (aiLevel === 'feeder' && Math.random() < 0.6) {
+                  processPlayerGameAction(s, { type: 'PASS' });
+                  return;
+                }
+                processPlayerGameAction(s, { type: 'CLAIM_HU' });
+                return;
+              }
+              if (acts.includes('gang') && aiLevel !== 'feeder') {
+                processPlayerGameAction(s, { type: 'CLAIM_GANG' });
+                return;
+              }
+              if (acts.includes('pon')) {
+                const ponProb = aiLevel === 'feeder' ? 0.85 : (aiLevel === 'god' ? 0.55 : 0.7);
+                if (Math.random() < ponProb) {
+                  processPlayerGameAction(s, { type: 'CLAIM_PON' });
+                  return;
+                }
+              }
+              if (acts.includes('chi')) {
+                const chiProb = aiLevel === 'feeder' ? 0.85 : (aiLevel === 'god' ? 0.35 : 0.45);
+                if (Math.random() < chiProb) {
+                  const combos = getChiCombinations(g.players[s].hand, g.lastDiscard.tile);
+                  if (combos.length > 0) {
+                    processPlayerGameAction(s, { type: 'CLAIM_CHI', combo: combos[0] });
+                    return;
+                  }
+                }
+              }
+              processPlayerGameAction(s, { type: 'PASS' });
+            }
+          }, 680);
+        }
+        return;
+      }
+
+      // 情況 B：輪到某位 AI 出牌
+      if (g.phase === 'DISCARD') {
+        const currentPlayer = g.players[g.turnSeat];
+        if (currentPlayer.isAI) {
+          const aiLevel = currentPlayer.aiLevel || 'normal';
+          appState.aiTimer = setTimeout(() => {
+            // 1. 自摸檢查（「放槍王」有 50% 機率裝作沒看到自摸，繼續打牌送幸福）
+            if (canWinStandard(currentPlayer.hand, g.rule)) {
+              if (!(aiLevel === 'feeder' && Math.random() < 0.5)) {
+                processPlayerGameAction(g.turnSeat, { type: 'SELF_WIN' });
+                return;
+              }
+            }
+            // 2. 若已立直，打出最後摸到的牌
+            if (currentPlayer.isRiichi) {
+              const lastDrawn = currentPlayer.hand[currentPlayer.hand.length - 1];
+              processPlayerGameAction(g.turnSeat, { type: 'DISCARD', tile: lastDrawn });
+              return;
+            }
+            // 3. 依據 AI 性格挑選捨牌
+            const chosen = chooseSmartDiscard(currentPlayer.hand, g.rule, aiLevel, g);
+
+            const rest = [...currentPlayer.hand];
+            rest.splice(rest.indexOf(chosen), 1);
+            const canRiichi = g.rule === 'JP13'
+              && aiLevel !== 'feeder'
+              && currentPlayer.melds.every(m => m.type === 'angang')
+              && currentPlayer.score >= 1000
+              && getWaitingTiles(rest, 'JP13').length > 0;
+
+            processPlayerGameAction(g.turnSeat, {
+              type: 'DISCARD',
+              tile: chosen,
+              riichi: canRiichi
+            });
+          }, 720);
+        }
+      }
+    }
+
+    // ------------------------- 13. 牌桌介面與直式/橫式響應式渲染 -------------------------
+    function enterGameTableUI() {
+      document.getElementById('lobby-screen').classList.add('hidden');
+      document.getElementById('game-screen').classList.remove('hidden');
+      applyTableThemeAndTileStyle();
+    }
+
+    function triggerActionFX(text) {
+      const overlay = document.getElementById('action-fx-overlay');
+      const badge = document.createElement('div');
+      badge.className = 'action-banner px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-stone-950 font-black text-2xl sm:text-5xl shadow-2xl border-2 border-white';
+      badge.style.fontFamily = "'Noto Serif TC', serif";
+      badge.textContent = text;
+      overlay.innerHTML = '';
+      overlay.appendChild(badge);
+    }
+
+    function renderFullGameTable() {
+      const g = appState.game;
+      if (!g) return;
+
+      const ruleLabels = { TW16: '🇹🇼 台灣16張', JP13: '🇯🇵 日本立直', GD13: '🇭🇰 廣東13張' };
+      document.getElementById('table-rule-label').textContent = ruleLabels[g.rule];
+      document.getElementById('table-shuffle-label').textContent = g.shuffleMode === 'electric' ? '⚡電動洗牌' : '👐手動洗牌';
+      document.getElementById('table-room-label').textContent = `房號: ${appState.roomCode}`;
+      document.getElementById('round-wind-text').textContent = `${WIND_LABELS[g.roundWind]}風局`;
+      document.getElementById('tiles-remaining-count').textContent = g.deck.length;
+
+      const doraBar = document.getElementById('jp-dora-bar');
+      if (g.rule === 'JP13' && g.doraIndicator) {
+        doraBar.classList.remove('hidden');
+        doraBar.classList.add('flex');
+        document.getElementById('jp-dora-tile').textContent = `${g.doraIndicator} → ${getNextDoraTile(g.doraIndicator)}`;
+      } else {
+        doraBar.classList.add('hidden');
+      }
+
+      const sBottom = appState.mySeat;
+      const sRight = (appState.mySeat + 1) % 4;
+      const sTop = (appState.mySeat + 2) % 4;
+      const sLeft = (appState.mySeat + 3) % 4;
+
+      updateCompassSeat('bottom', sBottom, g.turnSeat === sBottom);
+      updateCompassSeat('right', sRight, g.turnSeat === sRight);
+      updateCompassSeat('top', sTop, g.turnSeat === sTop);
+      updateCompassSeat('left', sLeft, g.turnSeat === sLeft);
+
+      renderOpponentSeat('top', g.players[sTop], g.dealerSeat === sTop);
+      renderOpponentSeat('left', g.players[sLeft], g.dealerSeat === sLeft);
+      renderOpponentSeat('right', g.players[sRight], g.dealerSeat === sRight);
+
+      renderDiscardRiver('river-bottom', g.players[sBottom].river, g.lastDiscard, sBottom);
+      renderDiscardRiver('river-right', g.players[sRight].river, g.lastDiscard, sRight);
+      renderDiscardRiver('river-top', g.players[sTop].river, g.lastDiscard, sTop);
+      renderDiscardRiver('river-left', g.players[sLeft].river, g.lastDiscard, sLeft);
+
+      renderMyBottomSeat(g.players[sBottom]);
+
+      if (g.phase === 'ROUND_OVER' && g.resultData) {
+        renderRoundResultModal();
+      } else {
+        document.getElementById('round-result-modal').classList.add('hidden');
+      }
+    }
+
+    function updateCompassSeat(pos, seatIdx, isActive) {
+      const el = document.getElementById(`turn-indicator-${pos}`);
+      el.textContent = WIND_LABELS[seatIdx];
+      el.className = isActive
+        ? 'text-xs sm:text-sm font-black px-1.5 rounded bg-amber-400 text-stone-950 animate-pulse'
+        : 'text-[10px] sm:text-xs font-bold text-stone-500';
+    }
+
+    function renderOpponentSeat(pos, player, isDealer) {
+      document.getElementById(`${pos}-wind-badge`).textContent = `${WIND_LABELS[player.seat]}${isDealer ? '莊' : ''}`;
+      document.getElementById(`${pos}-name`).textContent = player.name;
+      document.getElementById(`${pos}-score`).textContent = `${player.score}`;
+
+      // 渲染對家／左右家專屬花牌區
+      const flowersBox = document.getElementById(`${pos}-flowers`);
+      if (appState.dealHideFlowers || player.flowers.length === 0) {
+        flowersBox.innerHTML = '';
+      } else {
+        flowersBox.innerHTML = player.flowers.map(f => renderFlowerMiniBadge(f)).join('');
+      }
+
+      // 顯示 AI 性格徽章（放槍王 / 普通 / 麻將神）
+      const aiBadge = document.getElementById(`${pos}-ai-badge`);
+      if (player.isAI) {
+        const meta = AI_LEVEL_META[player.aiLevel || 'normal'];
+        aiBadge.textContent = meta.short;
+        aiBadge.className = `text-[9px] sm:text-[10px] px-1.5 rounded font-bold ${meta.badgeCls}`;
+        aiBadge.classList.remove('hidden');
+      } else {
+        aiBadge.classList.add('hidden');
+      }
+
+      const riichiEl = document.getElementById(`${pos}-riichi-badge`);
+      if (player.isRiichi) riichiEl.classList.remove('hidden');
+      else riichiEl.classList.add('hidden');
+
+      const backsContainer = document.getElementById(`${pos}-hand-backs`);
+      backsContainer.innerHTML = '';
+      const backClass = pos === 'top' ? 'tile-back-top' : 'tile-back-side';
+      const visibleHandCount = appState.dealRevealCounts
+        ? appState.dealRevealCounts[player.seat]
+        : player.hand.length;
+      const maxDisplayBacks = pos === 'top' ? visibleHandCount : Math.min(visibleHandCount, 10);
+      for (let i = 0; i < maxDisplayBacks; i++) {
+        const b = document.createElement('div');
+        b.className = `${backClass} ${appState.isDealingAnim ? 'animate-deal-tile' : ''}`;
+        backsContainer.appendChild(b);
+      }
+
+      const meldsContainer = document.getElementById(`${pos}-melds`);
+      meldsContainer.innerHTML = '';
+      player.melds.forEach(m => {
+        const group = document.createElement('div');
+        group.className = 'flex items-center gap-0.5 bg-black/30 p-0.5 rounded';
+        m.tiles.forEach((t, idx) => {
+          const tileDiv = document.createElement('div');
+          if (m.type === 'angang' && (idx === 0 || idx === 3)) {
+            tileDiv.className = 'tile-back-top !w-4 !h-6';
+          } else {
+            tileDiv.className = 'mj-tile river-tile !w-5 !h-7';
+            tileDiv.innerHTML = renderTileInnerHTML(t, true);
+          }
+          group.appendChild(tileDiv);
+        });
+        meldsContainer.appendChild(group);
+      });
+    }
+
+    function renderDiscardRiver(containerId, riverTiles, lastDiscard, ownerSeat) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      riverTiles.forEach((t, idx) => {
+        const div = document.createElement('div');
+        const isLatest = lastDiscard && lastDiscard.fromSeat === ownerSeat && idx === riverTiles.length - 1 && appState.game.phase === 'CLAIM';
+        div.className = `mj-tile river-tile ${isLatest ? 'latest-discard' : ''}`;
+        div.innerHTML = renderTileInnerHTML(t, true);
+        container.appendChild(div);
+      });
+    }
+
+    function renderMyBottomSeat(me) {
+      const g = appState.game;
+      document.getElementById('bottom-wind-badge').textContent = WIND_LABELS[me.seat];
+      document.getElementById('bottom-name').textContent = me.name;
+      document.getElementById('bottom-score').textContent = `${me.score}分`;
+
+      const dealerBadge = document.getElementById('bottom-dealer-badge');
+      if (g.dealerSeat === me.seat) dealerBadge.classList.remove('hidden');
+      else dealerBadge.classList.add('hidden');
+
+      const riichiBadge = document.getElementById('bottom-riichi-badge');
+      if (me.isRiichi) riichiBadge.classList.remove('hidden');
+      else riichiBadge.classList.add('hidden');
+
+      const furitenBadge = document.getElementById('jp-furiten-badge');
+      if (g.rule === 'JP13' && me.furiten) furitenBadge.classList.remove('hidden');
+      else furitenBadge.classList.add('hidden');
+
+      const statusBanner = document.getElementById('turn-status-banner');
+      const isMyTurnToDiscard = !appState.isDealingAnim && g.phase === 'DISCARD' && g.turnSeat === me.seat;
+      if (appState.isDealingAnim) {
+        statusBanner.textContent = '🀄 正在發牌理牌中...';
+        statusBanner.className = 'text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-amber-500/30 border border-amber-400 text-amber-200';
+      } else if (isMyTurnToDiscard) {
+        statusBanner.textContent = `👉 輪到您出牌（限時 ${g.turnTimeoutSec} 秒，超時自動代打好牌）`;
+        statusBanner.className = 'text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-amber-500/30 border border-amber-400 text-amber-200 animate-pulse';
+      } else if (g.phase === 'CLAIM' && g.pendingClaims[me.seat]) {
+        statusBanner.textContent = '⚡ 可執行吃 / 碰 / 槓 / 胡！';
+        statusBanner.className = 'text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-red-600/40 border border-red-400 text-red-200';
+      } else {
+        const turnPlayer = g.players[g.turnSeat];
+        statusBanner.textContent = `等待 ${turnPlayer.name} (${WIND_LABELS[turnPlayer.seat]}) 思考中...`;
+        statusBanner.className = 'text-xs sm:text-sm font-bold px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-400/40 text-emerald-200';
+      }
+
+      const flowersEl = document.getElementById('bottom-flowers');
+      if (appState.dealHideFlowers || me.flowers.length === 0) {
+        flowersEl.innerHTML = '';
+      } else {
+        flowersEl.innerHTML = `<span class="text-[11px] text-amber-300/90 mr-0.5">花牌:</span>` + me.flowers.map(f => renderFlowerMiniBadge(f)).join('');
+      }
+
+      const meldsEl = document.getElementById('bottom-melds');
+      meldsEl.innerHTML = '';
+      me.melds.forEach(m => {
+        const grp = document.createElement('div');
+        grp.className = 'flex items-center gap-0.5 bg-black/35 p-1 rounded-lg border border-white/10';
+        m.tiles.forEach((t, idx) => {
+          const td = document.createElement('div');
+          if (m.type === 'angang' && (idx === 0 || idx === 3)) {
+            td.className = 'tile-back-top !w-5 !h-7';
+          } else {
+            td.className = 'mj-tile river-tile';
+            td.innerHTML = renderTileInnerHTML(t, true);
+          }
+          grp.appendChild(td);
+        });
+        meldsEl.appendChild(grp);
+      });
+
+      const handContainer = document.getElementById('bottom-hand-container');
+      handContainer.innerHTML = '';
+      const visibleMyTiles = appState.dealRevealCounts
+        ? me.hand.slice(0, appState.dealRevealCounts[me.seat])
+        : me.hand;
+
+      if (appState.selectedTileIndex !== null && appState.selectedTileIndex >= visibleMyTiles.length) {
+        appState.selectedTileIndex = null;
+      }
+
+      visibleMyTiles.forEach((tile, idx) => {
+        const btn = document.createElement('button');
+        const isLastDrawn = isMyTurnToDiscard && idx === visibleMyTiles.length - 1;
+        const isSelected = appState.selectedTileIndex === idx;
+        btn.className = `mj-tile hand-tile ${isLastDrawn ? 'drawn-gap' : ''} ${isSelected ? 'selected' : ''} ${appState.isDealingAnim ? 'animate-deal-tile' : ''}`;
+        btn.innerHTML = renderTileInnerHTML(tile, false);
+
+        btn.addEventListener('click', () => {
+          if (!isMyTurnToDiscard) return;
+          if (me.isRiichi && idx !== me.hand.length - 1) return;
+
+          if (appState.selectedTileIndex === idx) {
+            appState.selectedTileIndex = null;
+            sendPlayerAction({ type: 'DISCARD', tile });
+          } else {
+            appState.selectedTileIndex = idx;
+            renderMyBottomSeat(me);
+          }
+        });
+
+        handContainer.appendChild(btn);
+      });
+
+      renderActionButtons(me);
+    }
+
+    function renderActionButtons(me) {
+      const g = appState.game;
+      const bar = document.getElementById('action-buttons-bar');
+      const chiBar = document.getElementById('chi-choice-bar');
+      bar.innerHTML = '';
+      chiBar.classList.add('hidden');
+
+      const buttons = [];
+
+      if (g.phase === 'DISCARD' && g.turnSeat === me.seat) {
+        if (canWinStandard(me.hand, g.rule)) {
+          buttons.push({
+            label: '🀄 自摸胡牌！',
+            cls: 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black animate-bounce',
+            onClick: () => sendPlayerAction({ type: 'SELF_WIN' })
+          });
+        }
+
+        if (!me.isRiichi) {
+          const counts = {};
+          me.hand.forEach(t => counts[t] = (counts[t] || 0) + 1);
+          for (const [tile, c] of Object.entries(counts)) {
+            if (c === 4) {
+              buttons.push({
+                label: `暗槓 (${tile})`,
+                cls: 'bg-purple-600 hover:bg-purple-500 text-white font-bold',
+                onClick: () => sendPlayerAction({ type: 'ANGANG', tile })
+              });
+            }
+          }
+
+          me.melds.forEach(m => {
+            if (m.type === 'pon' && me.hand.includes(m.tiles[0])) {
+              buttons.push({
+                label: `加槓 (${m.tiles[0]})`,
+                cls: 'bg-indigo-600 hover:bg-indigo-500 text-white font-bold',
+                onClick: () => sendPlayerAction({ type: 'JIAGANG', tile: m.tiles[0] })
+              });
+            }
+          });
+
+          if (g.rule === 'JP13' && me.melds.every(m => m.type === 'angang') && me.score >= 1000) {
+            const riichiDiscards = [];
+            me.hand.forEach((t, idx) => {
+              const rest = me.hand.filter((_, i) => i !== idx);
+              if (getWaitingTiles(rest, 'JP13').length > 0) riichiDiscards.push(t);
+            });
+            if (riichiDiscards.length > 0) {
+              buttons.push({
+                label: '🔥 宣告立直',
+                cls: 'bg-orange-600 hover:bg-orange-500 text-white font-black',
+                onClick: () => {
+                  const chosen = appState.selectedTileIndex !== null ? me.hand[appState.selectedTileIndex] : riichiDiscards[0];
+                  const tileToThrow = riichiDiscards.includes(chosen) ? chosen : riichiDiscards[0];
+                  appState.selectedTileIndex = null;
+                  sendPlayerAction({ type: 'DISCARD', tile: tileToThrow, riichi: true });
+                }
+              });
+            }
+          }
+        }
+      }
+
+      if (g.phase === 'CLAIM' && g.pendingClaims[me.seat]) {
+        const acts = g.pendingClaims[me.seat];
+        if (acts.includes('hu')) {
+          buttons.push({
+            label: '🀄 胡牌！',
+            cls: 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black animate-bounce',
+            onClick: () => sendPlayerAction({ type: 'CLAIM_HU' })
+          });
+        }
+        if (acts.includes('gang')) {
+          buttons.push({
+            label: '槓',
+            cls: 'bg-purple-600 hover:bg-purple-500 text-white font-black',
+            onClick: () => sendPlayerAction({ type: 'CLAIM_GANG' })
+          });
+        }
+        if (acts.includes('pon')) {
+          buttons.push({
+            label: '碰',
+            cls: 'bg-amber-600 hover:bg-amber-500 text-white font-black',
+            onClick: () => sendPlayerAction({ type: 'CLAIM_PON' })
+          });
+        }
+        if (acts.includes('chi')) {
+          buttons.push({
+            label: '吃',
+            cls: 'bg-emerald-600 hover:bg-emerald-500 text-white font-black',
+            onClick: () => {
+              const combos = getChiCombinations(me.hand, g.lastDiscard.tile);
+              if (combos.length === 1) {
+                sendPlayerAction({ type: 'CLAIM_CHI', combo: combos[0] });
+              } else if (combos.length > 1) {
+                showChiComboPicker(combos, g.lastDiscard.tile);
+              }
+            }
+          });
+        }
+        buttons.push({
+          label: '過 (跳過)',
+          cls: 'bg-stone-700 hover:bg-stone-600 text-stone-200 font-semibold',
+          onClick: () => sendPlayerAction({ type: 'PASS' })
+        });
+      }
+
+      if (buttons.length > 0) {
+        bar.classList.remove('hidden');
+        buttons.forEach(b => {
+          const btn = document.createElement('button');
+          btn.className = `px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl shadow-lg text-sm sm:text-base active:scale-95 transition ${b.cls}`;
+          btn.textContent = b.label;
+          btn.addEventListener('click', b.onClick);
+          bar.appendChild(btn);
+        });
+      } else {
+        bar.classList.add('hidden');
+      }
+    }
+
+    function showChiComboPicker(combos, discardTile) {
+      const chiBar = document.getElementById('chi-choice-bar');
+      const container = document.getElementById('chi-options-container');
+      container.innerHTML = '';
+      chiBar.classList.remove('hidden');
+
+      combos.forEach(combo => {
+        const full = sortTiles([...combo, discardTile]);
+        const btn = document.createElement('button');
+        btn.className = 'flex items-center gap-0.5 p-1 rounded-lg bg-emerald-900 hover:bg-emerald-800 border border-emerald-400';
+        full.forEach(t => {
+          const td = document.createElement('div');
+          td.className = 'mj-tile river-tile';
+          td.innerHTML = renderTileInnerHTML(t, true);
+          btn.appendChild(td);
+        });
+        btn.addEventListener('click', () => {
+          chiBar.classList.add('hidden');
+          sendPlayerAction({ type: 'CLAIM_CHI', combo });
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    document.getElementById('cancel-chi-btn').addEventListener('click', () => {
+      document.getElementById('chi-choice-bar').classList.add('hidden');
+    });
+
+    // ------------------------- 14. 單局結算視窗渲染 -------------------------
+    function renderRoundResultModal() {
+      const g = appState.game;
+      const res = g.resultData;
+      const modal = document.getElementById('round-result-modal');
+      modal.classList.remove('hidden');
+
+      const titleEl = document.getElementById('result-title');
+      const subEl = document.getElementById('result-subtitle');
+      const handEl = document.getElementById('result-winning-hand');
+      const fanListEl = document.getElementById('result-fan-list');
+      const totalFanEl = document.getElementById('result-total-fan');
+      const scoreBoardEl = document.getElementById('result-scoreboard');
+
+      handEl.innerHTML = '';
+      fanListEl.innerHTML = '';
+
+      if (res.isDraw) {
+        titleEl.textContent = '本局流局（海底摸完）';
+        subEl.textContent = `莊家 ${g.players[g.dealerSeat].name} 連莊`;
+        fanListEl.innerHTML = '<div class="text-stone-400 text-center py-2">無人胡牌，本局不計分。</div>';
+        totalFanEl.textContent = '0 分';
+      } else {
+        const winner = g.players[res.winnerSeat];
+        const loser = g.players[res.loserSeat];
+        titleEl.textContent = res.isSelfDraw ? '🎉 自摸胡牌！' : '🔥 榮和胡牌！';
+        subEl.textContent = res.isSelfDraw
+          ? `贏家：${winner.name} (${WIND_LABELS[winner.seat]}風)`
+          : `贏家：${winner.name} ｜ 放槍者：${loser.name}`;
+
+        res.fullHand.forEach(t => {
+          const td = document.createElement('div');
+          td.className = `mj-tile river-tile ${t === res.winTile ? 'ring-2 ring-amber-400' : ''}`;
+          td.innerHTML = renderTileInnerHTML(t, true);
+          handEl.appendChild(td);
+        });
+        res.melds.forEach(m => {
+          const sep = document.createElement('span');
+          sep.className = 'mx-1 text-emerald-500';
+          sep.textContent = '|';
+          handEl.appendChild(sep);
+          m.tiles.forEach(t => {
+            const td = document.createElement('div');
+            td.className = 'mj-tile river-tile';
+            td.innerHTML = renderTileInnerHTML(t, true);
+            handEl.appendChild(td);
+          });
+        });
+
+        res.evalRes.items.forEach(item => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between text-stone-200';
+          row.innerHTML = `<span>${item.name}</span><span class="font-bold text-amber-300">+${item.fan} ${res.evalRes.unit}</span>`;
+          fanListEl.appendChild(row);
+        });
+        totalFanEl.textContent = `${res.evalRes.totalFan} ${res.evalRes.unit}（+${res.evalRes.winPoints} 分）`;
+      }
+
+      scoreBoardEl.innerHTML = '';
+      g.players.forEach(p => {
+        const box = document.createElement('div');
+        box.className = 'bg-stone-800 rounded-lg p-2 text-center border border-stone-700';
+        box.innerHTML = `
+          <div class="text-xs text-stone-400">${WIND_LABELS[p.seat]}・${p.name}</div>
+          <div class="text-sm font-mono font-bold text-amber-300 mt-0.5">${p.score}</div>
+        `;
+        scoreBoardEl.appendChild(box);
+      });
+
+      const nextBtn = document.getElementById('next-round-btn');
+      const guestHint = document.getElementById('guest-next-round-hint');
+      if (appState.isHost) {
+        nextBtn.classList.remove('hidden');
+        guestHint.classList.add('hidden');
+      } else {
+        nextBtn.classList.add('hidden');
+        guestHint.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>
