@@ -2177,8 +2177,10 @@
       });
     });
 
-    // 訪客加入房間
+    // 訪客加入房間（防止連點重複加入）
+    let isJoiningRoom = false;
     document.getElementById('join-room-btn').addEventListener('click', () => {
+      if (isJoiningRoom) return;
       const code = document.getElementById('join-room-code-input').value.trim().toUpperCase();
       if (!code || code.length < 4) {
         showLobbyToast('請輸入正確的房間代碼！', true);
@@ -2190,6 +2192,11 @@
         return;
       }
 
+      isJoiningRoom = true;
+      const joinBtn = document.getElementById('join-room-btn');
+      joinBtn.disabled = true;
+      joinBtn.classList.add('opacity-60');
+
       sound.initContext();
       sound.startBgm();
       appState.myName = getPlayerName();
@@ -2197,10 +2204,17 @@
       appState.roomCode = code;
       showLobbyToast(`正在連線至房間 ${code}...`);
 
+      if (appState.peer) {
+        try { appState.peer.destroy(); } catch (e) {}
+      }
+
       let peer;
       try {
         peer = new Peer({ debug: 0 });
       } catch (err) {
+        isJoiningRoom = false;
+        joinBtn.disabled = false;
+        joinBtn.classList.remove('opacity-60');
         showLobbyToast('目前環境限制 WebSocket 連線，請改用左側建立牌桌進行 AI 對戰！', true);
         return;
       }
@@ -2224,6 +2238,9 @@
         });
 
         conn.on('close', () => {
+          isJoiningRoom = false;
+          joinBtn.disabled = false;
+          joinBtn.classList.remove('opacity-60');
           showLobbyToast('與房主的連線已中斷。', true);
           document.getElementById('game-screen').classList.add('hidden');
           document.getElementById('lobby-screen').classList.remove('hidden');
@@ -2231,60 +2248,33 @@
       });
 
       peer.on('error', () => {
+        isJoiningRoom = false;
+        joinBtn.disabled = false;
+        joinBtn.classList.remove('opacity-60');
         showLobbyToast(`無法連線至房號 ${code}（請確認房號或改用左側單機 AI 開局）`, true);
       });
     });
 
-    // 訪客加入房間
-    document.getElementById('join-room-btn').addEventListener('click', () => {
-      const code = document.getElementById('join-room-code-input').value.trim().toUpperCase();
-      if (!code || code.length < 4) {
-        showLobbyToast('請輸入正確的房間代碼！', true);
-        return;
-      }
-
-      sound.initContext();
-      sound.startBgm();
-      appState.myName = getPlayerName();
-      appState.isHost = false;
-      appState.roomCode = code;
-      showLobbyToast(`正在連線至房間 ${code}...`);
-
-      const peer = new Peer({ debug: 1 });
-      appState.peer = peer;
-
-      peer.on('open', (id) => {
-        appState.myPeerId = id;
-        const conn = peer.connect(`MJ_GH_${code}`, { reliable: true });
-        appState.hostConn = conn;
-
-        conn.on('open', () => {
-          conn.send({
-            type: 'JOIN_REQUEST',
-            name: appState.myName,
-            peerId: id
-          });
-        });
-
-        conn.on('data', (msg) => {
-          handleGuestReceiveData(msg);
-        });
-
-        conn.on('close', () => {
-          showLobbyToast('與房主的連線已中斷。', true);
-          document.getElementById('game-screen').classList.add('hidden');
-          document.getElementById('lobby-screen').classList.remove('hidden');
-        });
-      });
-
-      peer.on('error', () => {
-        showLobbyToast(`無法連線至房號 ${code}（請確認房號是否正確）`, true);
-      });
-    });
-
-    // 房主處理來自訪客的封包
+    // 房主處理來自訪客的封包（含同 PeerID 重複申請去重防護）
     function handleHostReceiveData(conn, msg) {
       if (msg.type === 'JOIN_REQUEST') {
+        const senderPeerId = msg.peerId || conn.peer;
+        const existingSeat = appState.seats.find(s => !s.isAI && s.peerId === senderPeerId);
+        if (existingSeat) {
+          existingSeat.name = msg.name;
+          conn.send({
+            type: 'JOIN_ACCEPTED',
+            assignedSeat: existingSeat.seat,
+            roomCode: appState.roomCode,
+            rule: document.getElementById('rule-select').value,
+            shuffleMode: appState.shuffleMode,
+            turnTimeoutSec: appState.turnTimeoutSec,
+            seats: appState.seats
+          });
+          broadcastLobbyState();
+          return;
+        }
+
         const emptySeat = appState.seats.find(s => s.isAI && s.seat !== 0);
         if (!emptySeat || appState.game) {
           conn.send({ type: 'JOIN_REJECTED', reason: appState.game ? '牌局已經開始了！' : '房間已滿 4 人！' });
@@ -2292,7 +2282,7 @@
         }
         emptySeat.isAI = false;
         emptySeat.name = msg.name;
-        emptySeat.peerId = msg.peerId;
+        emptySeat.peerId = senderPeerId;
 
         conn.send({
           type: 'JOIN_ACCEPTED',
@@ -2314,8 +2304,16 @@
     // 訪客處理來自房主的封包
     function handleGuestReceiveData(msg) {
       if (msg.type === 'JOIN_REJECTED') {
+        isJoiningRoom = false;
+        const joinBtn = document.getElementById('join-room-btn');
+        joinBtn.disabled = false;
+        joinBtn.classList.remove('opacity-60');
         showLobbyToast(msg.reason, true);
       } else if (msg.type === 'JOIN_ACCEPTED') {
+        isJoiningRoom = false;
+        const joinBtn = document.getElementById('join-room-btn');
+        joinBtn.disabled = false;
+        joinBtn.classList.remove('opacity-60');
         appState.mySeat = msg.assignedSeat;
         appState.seats = msg.seats;
         appState.shuffleMode = msg.shuffleMode || 'electric';
@@ -2472,6 +2470,330 @@
         broadcastLobbyState();
       });
     });
+
+    // 複製邀請網址按鈕
+    document.getElementById('copy-invite-btn').addEventListener('click', () => {
+      const inviteUrl = getRoomInviteUrl();
+      const tempInput = document.createElement('input');
+      tempInput.value = inviteUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempInput);
+      showLobbyToast('✅ 已複製專屬邀請網址！可直接貼到 LINE 傳給親友掃碼或點擊加入。');
+    });
+
+    // 離開房間 / 返回大廳
+    function resetAndReturnToLobby() {
+      clearTimeout(appState.aiTimer);
+      clearInterval(appState.turnCountdownInterval);
+      isJoiningRoom = false;
+      const joinBtn = document.getElementById('join-room-btn');
+      if (joinBtn) {
+        joinBtn.disabled = false;
+        joinBtn.classList.remove('opacity-60');
+      }
+      if (appState.peer) {
+        try { appState.peer.destroy(); } catch (e) {}
+        appState.peer = null;
+      }
+      appState.connections = {};
+      appState.hostConn = null;
+      appState.game = null;
+      document.getElementById('game-screen').classList.add('hidden');
+      document.getElementById('round-result-modal').classList.add('hidden');
+      document.getElementById('waiting-room-panel').classList.add('hidden');
+      document.getElementById('lobby-setup-panel').classList.remove('hidden');
+      document.getElementById('lobby-screen').classList.remove('hidden');
+    }
+
+    document.getElementById('leave-room-btn').addEventListener('click', resetAndReturnToLobby);
+    document.getElementById('guest-leave-btn').addEventListener('click', resetAndReturnToLobby);
+    document.getElementById('back-to-lobby-btn').addEventListener('click', resetAndReturnToLobby);
+
+    // 房主開局與下一局按鈕（「AI 補滿空位並立即開局」）
+    document.getElementById('start-game-btn').addEventListener('click', () => {
+      if (!appState.isHost) return;
+      startNewRound(0, 0, 0);
+    });
+
+    document.getElementById('next-round-btn').addEventListener('click', () => {
+      if (!appState.isHost || !appState.game) return;
+      const g = appState.game;
+      const dealerWon = g.lastWinnerSeat === g.dealerSeat;
+      const nextDealer = dealerWon ? g.dealerSeat : (g.dealerSeat + 1) % 4;
+      const nextStreak = dealerWon ? g.streak + 1 : 0;
+      const nextRoundWind = (!dealerWon && nextDealer === 0) ? (g.roundWind + 1) % 4 : g.roundWind;
+      document.getElementById('round-result-modal').classList.add('hidden');
+      startNewRound(nextDealer, nextStreak, nextRoundWind);
+    });
+
+    // 玩家動作統一派發（房主本地執行，訪客送交房主驗證）
+    function sendPlayerAction(action) {
+      if (!appState.game) return;
+      if (appState.isHost) {
+        processPlayerGameAction(appState.mySeat, action);
+      } else if (appState.hostConn && appState.hostConn.open) {
+        appState.hostConn.send({
+          type: 'PLAYER_ACTION',
+          seat: appState.mySeat,
+          action
+        });
+      }
+    }
+
+    // 建立洗好並隨機打亂的牌山
+    function buildShuffledDeck(rule) {
+      const deck = [];
+      for (const s of ['m', 'p', 's']) {
+        for (let n = 1; n <= 9; n++) {
+          for (let c = 0; c < 4; c++) deck.push(`${n}${s}`);
+        }
+      }
+      for (let z = 1; z <= 7; z++) {
+        for (let c = 0; c < 4; c++) deck.push(`${z}z`);
+      }
+      if (rule === 'TW16' || rule === 'GD13') {
+        for (let f = 1; f <= 8; f++) deck.push(`${f}f`);
+      }
+      for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+      }
+      return deck;
+    }
+
+    // 補花處理（回傳共補了幾張花）
+    function replaceFlowersForPlayer(player, deck) {
+      let replaced = 0;
+      let hasFlower = true;
+      while (hasFlower && deck.length > 0) {
+        hasFlower = false;
+        for (let i = 0; i < player.hand.length; i++) {
+          if (isFlower(player.hand[i])) {
+            const flowerTile = player.hand.splice(i, 1)[0];
+            player.flowers.push(flowerTile);
+            if (deck.length > 0) {
+              player.hand.push(deck.pop());
+            }
+            replaced++;
+            hasFlower = true;
+            break;
+          }
+        }
+      }
+      return replaced;
+    }
+
+    // 開啟新一局並發牌（確保空缺座位皆由 AI 補滿）
+    function startNewRound(dealerSeat = 0, streak = 0, roundWind = 0) {
+      if (!appState.isHost) return;
+      clearTimeout(appState.aiTimer);
+      clearInterval(appState.turnCountdownInterval);
+
+      const rule = document.getElementById('rule-select').value;
+      const deck = buildShuffledDeck(rule);
+      const baseCount = rule === 'TW16' ? 16 : 13;
+
+      const doraIndicator = rule === 'JP13' ? deck.pop() : null;
+
+      const players = appState.seats.map((s, idx) => {
+        const hand = [];
+        for (let i = 0; i < baseCount; i++) hand.push(deck.pop());
+        if (idx === dealerSeat) hand.push(deck.pop());
+        return {
+          seat: idx,
+          name: s.name,
+          isAI: s.isAI,
+          aiLevel: s.aiLevel || 'normal',
+          score: s.score,
+          hand,
+          melds: [],
+          river: [],
+          flowers: [],
+          isRiichi: false,
+          furiten: false
+        };
+      });
+
+      // 開局自動補花並理牌
+      let totalFlowersReplaced = 0;
+      if (rule === 'TW16' || rule === 'GD13') {
+        players.forEach(p => {
+          totalFlowersReplaced += replaceFlowersForPlayer(p, deck);
+        });
+      }
+      players.forEach((p, idx) => {
+        if (idx === dealerSeat && p.hand.length > 1) {
+          const extra = p.hand.pop();
+          p.hand = [...sortTiles(p.hand), extra];
+        } else {
+          p.hand = sortTiles(p.hand);
+        }
+      });
+
+      appState.selectedTileIndex = null;
+      appState.game = {
+        rule,
+        shuffleMode: appState.shuffleMode,
+        turnTimeoutSec: appState.turnTimeoutSec,
+        deck,
+        players,
+        dealerSeat,
+        streak,
+        roundWind,
+        turnSeat: dealerSeat,
+        phase: 'DISCARD',
+        lastDiscard: null,
+        pendingClaims: {},
+        doraIndicator,
+        totalFlowersReplaced,
+        lastWinnerSeat: dealerSeat,
+        resultData: null
+      };
+
+      const payload = {
+        type: 'GAME_STATE_UPDATE',
+        game: appState.game,
+        soundEvent: null,
+        fxText: null,
+        triggerShuffleAnim: true
+      };
+      Object.values(appState.connections).forEach(c => {
+        if (c.open) c.send(payload);
+      });
+
+      runAnimatedDealSequence(appState.game, true);
+    }
+
+    // 電動／手動洗牌與一手一手「噠噠噠」發牌動畫序列
+    function runAnimatedDealSequence(gameObj, isHostRunner) {
+      enterGameTableUI();
+      appState.isDealingAnim = true;
+      appState.dealHideFlowers = true;
+      appState.dealRevealCounts = [0, 0, 0, 0];
+      renderFullGameTable();
+
+      const overlay = document.getElementById('shuffle-visual-overlay');
+      const box = document.getElementById('shuffle-visual-box');
+      const icon = document.getElementById('shuffle-visual-icon');
+      const title = document.getElementById('shuffle-visual-title');
+      const sub = document.getElementById('shuffle-visual-sub');
+
+      overlay.classList.remove('hidden');
+      if (gameObj.shuffleMode === 'manual') {
+        box.className = 'animate-scramble px-6 py-4 rounded-2xl bg-stone-900/95 border-2 border-amber-400 text-center shadow-2xl';
+        icon.textContent = '👐🎲';
+        title.textContent = '手動搓牌堆砌牌牆・擲骰開門...';
+        sub.textContent = '四家手搓洗牌完畢，準備依序抓牌';
+        sound.playManualShuffle();
+      } else {
+        box.className = 'animate-elevator px-6 py-4 rounded-2xl bg-stone-900/95 border-2 border-emerald-400 text-center shadow-2xl';
+        icon.textContent = '⚡🀄';
+        title.textContent = '電動磁力洗牌升降台升牌中...';
+        sub.textContent = '雙層升降機自動理牌升起';
+        sound.playElectricShuffle();
+      }
+
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        const targetCounts = gameObj.players.map(p => p.hand.length);
+        let step = 0;
+        const maxRounds = 5;
+
+        const dealTimer = setInterval(() => {
+          const seatIdx = step % 4;
+          const roundIdx = Math.floor(step / 4);
+          if (roundIdx >= maxRounds) {
+            clearInterval(dealTimer);
+            appState.isDealingAnim = false;
+            appState.dealRevealCounts = null;
+            appState.dealHideFlowers = false;
+            renderFullGameTable();
+            if (gameObj.totalFlowersReplaced > 0) {
+              sound.playAction('補花');
+              triggerActionFX('🌸 開局自動補花完成！');
+            }
+            startLocalTurnCountdownUI();
+            if (isHostRunner) scheduleHostAITurn();
+            return;
+          }
+
+          const nextVal = Math.min(targetCounts[seatIdx], appState.dealRevealCounts[seatIdx] + 4);
+          if (nextVal > appState.dealRevealCounts[seatIdx]) {
+            appState.dealRevealCounts[seatIdx] = nextVal;
+            for (let t = 0; t < 4; t++) {
+              setTimeout(() => sound.playDealTick(), t * 35);
+            }
+            renderFullGameTable();
+          }
+          step++;
+        }, 145);
+      }, 850);
+    }
+
+    // 出牌倒數計時器與超時自動打好牌
+    function startLocalTurnCountdownUI() {
+      clearInterval(appState.turnCountdownInterval);
+      const g = appState.game;
+      const timerDisplay = document.getElementById('turn-timer-display');
+      const timerBar = document.getElementById('turn-timer-bar');
+      if (!g || g.phase === 'ROUND_OVER' || appState.isDealingAnim) {
+        if (timerDisplay) timerDisplay.textContent = '--';
+        return;
+      }
+
+      const totalSec = g.turnTimeoutSec || 12;
+      appState.turnDeadlineMs = Date.now() + totalSec * 1000;
+
+      const updateTick = () => {
+        const remainMs = Math.max(0, appState.turnDeadlineMs - Date.now());
+        const remainSec = Math.ceil(remainMs / 1000);
+        const pct = Math.max(0, Math.min(100, (remainMs / (totalSec * 1000)) * 100));
+
+        if (timerDisplay) {
+          timerDisplay.textContent = `${remainSec}s`;
+          timerDisplay.className = remainSec <= 3
+            ? 'text-base sm:text-xl font-mono font-black text-red-400 animate-ping leading-tight my-0.5'
+            : 'text-base sm:text-xl font-mono font-black text-white leading-tight my-0.5';
+        }
+        if (timerBar) {
+          timerBar.style.width = `${pct}%`;
+          timerBar.className = remainSec <= 3
+            ? 'h-full bg-red-500 transition-all duration-200'
+            : 'h-full bg-emerald-400 transition-all duration-200';
+        }
+
+        if (remainMs <= 0) {
+          clearInterval(appState.turnCountdownInterval);
+          if (appState.isHost && appState.game && appState.game.phase !== 'ROUND_OVER') {
+            if (appState.game.phase === 'DISCARD') {
+              const curPlayer = appState.game.players[appState.game.turnSeat];
+              if (!curPlayer.isAI) {
+                const autoTile = curPlayer.isRiichi
+                  ? curPlayer.hand[curPlayer.hand.length - 1]
+                  : chooseSmartDiscard(curPlayer.hand, appState.game.rule, 'god', appState.game);
+                processPlayerGameAction(appState.game.turnSeat, {
+                  type: 'DISCARD',
+                  tile: autoTile,
+                  isAutoTimeout: true
+                });
+              }
+            } else if (appState.game.phase === 'CLAIM') {
+              Object.keys(appState.game.pendingClaims).forEach(s => {
+                const seatNum = Number(s);
+                if (!appState.game.players[seatNum].isAI) {
+                  processPlayerGameAction(seatNum, { type: 'PASS' });
+                }
+              });
+            }
+          }
+        }
+      };
+
+      updateTick();
+      appState.turnCountdownInterval = setInterval(updateTick, 200);
+    }
 
     function broadcastLobbyState() {
       if (!appState.isHost) return;
