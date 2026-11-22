@@ -182,7 +182,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 真人麥克風語音對談 · 真人離線\AI代打 · 語音報牌
+          台灣16張 · 日本立直 · 廣東13張 ｜ 真人麥克風語音對談（可調大小聲） · 真人離線\AI代打 · 語音報牌
         </p>
       </div>
 
@@ -279,9 +279,16 @@
                 <button data-batch-ai="standard" class="px-2 py-0.5 rounded bg-sky-900/70 hover:bg-sky-800 border border-sky-500/40 text-[11px] text-sky-200 font-bold">🙂 普通</button>
                 <button data-batch-ai="god" class="px-2 py-0.5 rounded bg-amber-900/70 hover:bg-amber-800 border border-amber-500/40 text-[11px] text-amber-200 font-bold">👑 麻將神</button>
               </div>
-              <button id="lobby-mic-btn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-bold text-slate-200">
-                🎙️ 開啟語音對談
-              </button>
+              <div class="flex items-center gap-1.5">
+                <button id="lobby-mic-btn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-bold text-slate-200">
+                  🎙️ 開啟語音對談
+                </button>
+                <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-700 rounded-lg px-2 py-1">
+                  <span class="text-[10px] text-emerald-300 font-bold">🔊</span>
+                  <input id="lobby-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-14 sm:w-20 accent-emerald-400" title="調整麥克風收音大小聲" />
+                  <span id="lobby-mic-vol-label" class="text-[10px] font-mono text-emerald-200 w-7 text-right">100%</span>
+                </div>
+              </div>
             </div>
 
             <div id="waiting-seats-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
@@ -300,7 +307,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：真人開啟麥克風即可與線上牌友直接對談（開麥者打牌不觸發系統報牌，AI 依舊報牌）；離線自動切換「真人離線\AI代打」。
+      提示：真人開啟麥克風即可與線上牌友直接對談（可隨時調整麥克風大小聲；開麥者打牌不觸發系統報牌，AI 依舊報牌）。
     </div>
   </div>
 
@@ -313,9 +320,14 @@
         <span id="table-room-tag" class="hidden sm:inline-block px-2 py-1 rounded bg-slate-950/60 border border-slate-700 text-[11px] font-mono text-slate-300">房號: -----</span>
       </div>
       <div class="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
-        <button id="game-mic-btn" class="px-2 py-1 rounded bg-slate-950/85 hover:bg-slate-800 border border-slate-600 text-[11px] sm:text-xs text-slate-200 font-bold">
-          🎙️ 開麥
-        </button>
+        <!-- 麥克風開關與快捷大小聲滑桿 -->
+        <div class="flex items-center gap-1 bg-slate-950/85 border border-slate-700 rounded px-1.5 py-0.5">
+          <button id="game-mic-btn" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] sm:text-xs text-slate-200 font-bold">
+            🎙️ 開麥
+          </button>
+          <input id="game-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-12 sm:w-16 accent-emerald-400" title="調整麥克風音量大小" />
+          <span id="game-mic-vol-label" class="text-[10px] font-mono text-emerald-300 w-7 text-right">100%</span>
+        </div>
         <button id="game-fullscreen-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-emerald-200 font-bold">⛶ 全螢幕</button>
         <button id="quick-voice-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-sky-200 font-bold">🗣️ 報牌開</button>
         <button id="quick-bgm-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-amber-200 font-bold">🎵 音樂關</button>
@@ -465,13 +477,20 @@
             <input id="sfx-toggle" type="checkbox" checked class="w-4 h-4 accent-amber-400" />
           </div>
           <div>
-            <label class="block text-slate-300 mb-1">音效與報牌音量 (<span id="sfx-vol-label">80</span>%)</label>
+            <label class="block text-slate-300 mb-1">系統音效與報牌音量 (<span id="sfx-vol-label">80</span>%)</label>
             <input id="sfx-vol-slider" type="range" min="0" max="100" value="80" class="w-full accent-amber-400" />
           </div>
         </div>
         <div class="space-y-2 pt-2 border-t border-slate-800">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-amber-200">4. 背景音樂（內建古箏五聲音階）</span>
+            <span class="font-bold text-emerald-300">4. 真人線上語音麥克風音量 (<span id="settings-mic-vol-label">100</span>%)</span>
+            <span class="text-[11px] text-slate-400">0% 靜音 ～ 200% 增益放大</span>
+          </div>
+          <input id="settings-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-full accent-emerald-400" />
+        </div>
+        <div class="space-y-2 pt-2 border-t border-slate-800">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-200">5. 背景音樂（內建古箏五聲音階）</span>
             <input id="bgm-toggle" type="checkbox" class="w-4 h-4 accent-amber-400" />
           </div>
           <div>
@@ -567,11 +586,9 @@
         window.speechSynthesis.speak(utter);
       } catch (e) {}
     }
-    // 依據玩家是否為真人且已開啟麥克風，決定是否執行系統語音報牌
     speakForSeat(seatIdx, text) {
       const p = gameState.players[seatIdx];
       if (p && !p.isAI && p.micEnabled) {
-        // 真人玩家開啟麥克風時，該真人玩家打牌與喊牌不觸發系統報牌語音
         return;
       }
       this.speak(text);
@@ -623,14 +640,41 @@
   const audioEngine = new AudioMediaEngine();
 
   /* ==========================================================================
-     2. 真人玩家 WebRTC 線上麥克風語音對談引擎（全網狀點對點通話）
+     2. 真人玩家 WebRTC 線上麥克風語音對談引擎（支援即時收音大小聲 GainNode 增益）
      ========================================================================== */
   class VoiceChatEngine {
     constructor() {
-      this.localStream = null;
+      this.rawStream = null;
+      this.processedStream = null;
+      this.micAudioCtx = null;
+      this.micGainNode = null;
+      this.micGainValue = 1.0; // 0.0 ~ 2.0 (0% ~ 200%)
       this.isMicOn = false;
       this.mediaCalls = {}; // remotePeerId -> MediaConnection
       this.audioEls = {};   // remotePeerId -> HTMLAudioElement
+    }
+
+    setMicVolumePercent(percent) {
+      const clamped = Math.max(0, Math.min(200, Number(percent) || 0));
+      this.micGainValue = clamped / 100;
+      if (this.micGainNode && this.micAudioCtx) {
+        try {
+          this.micGainNode.gain.setValueAtTime(this.micGainValue, this.micAudioCtx.currentTime);
+        } catch (e) {
+          this.micGainNode.gain.value = this.micGainValue;
+        }
+      }
+      // 同步所有介面上的麥克風音量滑桿與文字
+      const sliders = ['lobby-mic-vol-slider', 'game-mic-vol-slider', 'settings-mic-vol-slider'];
+      const labels = ['lobby-mic-vol-label', 'game-mic-vol-label', 'settings-mic-vol-label'];
+      sliders.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && Number(el.value) !== clamped) el.value = clamped;
+      });
+      labels.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = `${clamped}%`;
+      });
     }
 
     async toggleMic() {
@@ -647,7 +691,7 @@
         return;
       }
       try {
-        this.localStream = await navigator.mediaDevices.getUserMedia({
+        this.rawStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -655,6 +699,25 @@
           },
           video: false
         });
+
+        // 建立 Web Audio GainNode 管線，實現即時麥克風音量大小調節（0% ~ 200%）
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          this.micAudioCtx = new AudioCtx();
+          if (this.micAudioCtx.state === 'suspended') {
+            await this.micAudioCtx.resume();
+          }
+          const source = this.micAudioCtx.createMediaStreamSource(this.rawStream);
+          this.micGainNode = this.micAudioCtx.createGain();
+          this.micGainNode.gain.value = this.micGainValue;
+          const dest = this.micAudioCtx.createMediaStreamDestination();
+          source.connect(this.micGainNode);
+          this.micGainNode.connect(dest);
+          this.processedStream = dest.stream;
+        } else {
+          this.processedStream = this.rawStream;
+        }
+
         this.isMicOn = true;
         this.updateMicButtonsUI();
         this.syncMicStatusToRoom(true);
@@ -665,9 +728,18 @@
     }
 
     stopMic() {
-      if (this.localStream) {
-        this.localStream.getTracks().forEach(track => track.stop());
-        this.localStream = null;
+      if (this.rawStream) {
+        this.rawStream.getTracks().forEach(track => track.stop());
+        this.rawStream = null;
+      }
+      if (this.processedStream) {
+        this.processedStream.getTracks().forEach(track => track.stop());
+        this.processedStream = null;
+      }
+      if (this.micAudioCtx) {
+        try { this.micAudioCtx.close(); } catch (e) {}
+        this.micAudioCtx = null;
+        this.micGainNode = null;
       }
       Object.values(this.mediaCalls).forEach(call => {
         try { call.close(); } catch (e) {}
@@ -700,15 +772,15 @@
       }
     }
 
-    // 撥號給房間內所有其他真人玩家（支援房主與訪客、訪客與訪客全網狀對談）
     dialAllHumanPeers() {
-      if (!this.isMicOn || !this.localStream || !peer || peer.disconnected) return;
+      const outboundStream = this.processedStream || this.rawStream;
+      if (!this.isMicOn || !outboundStream || !peer || peer.disconnected) return;
       gameState.players.forEach((p, idx) => {
         if (idx === mySeatIndex || p.isAI || !p.peerId) return;
         const targetPid = p.peerId;
         if (this.mediaCalls[targetPid] && this.mediaCalls[targetPid].open) return;
         try {
-          const call = peer.call(targetPid, this.localStream);
+          const call = peer.call(targetPid, outboundStream);
           if (call) {
             this.bindMediaCall(targetPid, call);
           }
@@ -716,12 +788,12 @@
       });
     }
 
-    // 接聽其他真人玩家撥入的語音通話
     handleIncomingCall(call) {
       if (!call) return;
       const remotePid = call.peer;
+      const outboundStream = this.processedStream || this.rawStream;
       try {
-        call.answer(this.isMicOn && this.localStream ? this.localStream : undefined);
+        call.answer(this.isMicOn && outboundStream ? outboundStream : undefined);
         this.bindMediaCall(remotePid, call);
       } catch (e) {}
     }
@@ -770,12 +842,12 @@
       const gameBtn = document.getElementById('game-mic-btn');
       if (this.isMicOn) {
         if (lobbyBtn) {
-          lobbyBtn.textContent = '🟢 麥克風已開（對談中）';
+          lobbyBtn.textContent = '🟢 麥克風已開';
           lobbyBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 border border-emerald-300 text-[11px] font-black text-white shadow';
         }
         if (gameBtn) {
-          gameBtn.textContent = '🟢 麥克風開';
-          gameBtn.className = 'px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 border border-emerald-300 text-[11px] sm:text-xs text-white font-black shadow';
+          gameBtn.textContent = '🟢 開麥中';
+          gameBtn.className = 'px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[11px] sm:text-xs text-white font-black shadow';
         }
       } else {
         if (lobbyBtn) {
@@ -784,7 +856,7 @@
         }
         if (gameBtn) {
           gameBtn.textContent = '🎙️ 開麥';
-          gameBtn.className = 'px-2 py-1 rounded bg-slate-950/85 hover:bg-slate-800 border border-slate-600 text-[11px] sm:text-xs text-slate-200 font-bold';
+          gameBtn.className = 'px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] sm:text-xs text-slate-200 font-bold';
         }
       }
     }
@@ -1107,7 +1179,6 @@
     return raw || ('雀士' + Math.floor(100 + Math.random() * 900));
   }
 
-  // 初始化預設暱稱與網址 ?room= 參數
   const urlParams = new URLSearchParams(window.location.search);
   const presetRoom = (urlParams.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
   document.getElementById('player-name-input').value = '雀士' + Math.floor(100 + Math.random() * 900);
@@ -1188,7 +1259,6 @@
   window.addEventListener('beforeunload', notifyHostImLeaving);
   window.addEventListener('pagehide', notifyHostImLeaving);
 
-  // 雙向心跳檢測
   setInterval(() => {
     if (isHost) {
       const now = Date.now();
@@ -1525,7 +1595,6 @@
       const prevDiscard = gameState.lastDiscard;
       Object.assign(gameState, data.state);
 
-      // 訪客端偵測到新出牌時，依該出牌者是否為開麥真人決定是否播報語音
       if (gameState.lastDiscard && (!prevDiscard || prevDiscard.tile !== gameState.lastDiscard.tile || prevDiscard.fromSeat !== gameState.lastDiscard.fromSeat)) {
         audioEngine.playTileClack(1.0);
         audioEngine.speakForSeat(gameState.lastDiscard.fromSeat, getTileSpokenName(gameState.lastDiscard.tile));
@@ -1734,7 +1803,6 @@
       gameState.lastDiscard = { tile, fromSeat: seatIdx };
 
       audioEngine.playTileClack(1.0);
-      // 核心規則：真人玩家開啟麥克風時，該真人玩家打牌不報牌；AI玩家依舊會報牌
       audioEngine.speakForSeat(seatIdx, getTileSpokenName(tile));
 
       const claims = {};
@@ -2232,10 +2300,19 @@
   });
 
   /* ==========================================================================
-     12. 介面按鈕事件（麥克風語音對談、全螢幕、複製邀請網址、離開房間、設定彈窗）
+     12. 介面按鈕事件（麥克風開關與大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
      ========================================================================== */
   document.getElementById('lobby-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
   document.getElementById('game-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
+
+  ['lobby-mic-vol-slider', 'game-mic-vol-slider', 'settings-mic-vol-slider'].forEach(sliderId => {
+    const slider = document.getElementById(sliderId);
+    if (slider) {
+      slider.addEventListener('input', (e) => {
+        voiceChat.setMicVolumePercent(e.target.value);
+      });
+    }
+  });
 
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
