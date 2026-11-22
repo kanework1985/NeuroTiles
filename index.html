@@ -155,6 +155,9 @@
 </head>
 <body class="flex flex-col">
 
+  <!-- 隱藏的遠端真人語音音訊容器 -->
+  <div id="remote-voice-container" class="hidden"></div>
+
   <!-- ==================== 1. 大廳與等待室畫面 ==================== -->
   <div id="lobby-screen" class="w-full h-full flex flex-col justify-between p-3 sm:p-5 overflow-y-auto">
     <!-- 頂部工具列 -->
@@ -179,7 +182,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 真人離線\AI代打 自動接管 ｜ 語音報牌 · 自訂音樂 · 雙牌面
+          台灣16張 · 日本立直 · 廣東13張 ｜ 真人麥克風語音對談 · 真人離線\AI代打 · 語音報牌
         </p>
       </div>
 
@@ -269,13 +272,16 @@
 
           <!-- 四家座位與開局控制 -->
           <div class="md:col-span-7 flex flex-col gap-2">
-            <div id="host-ai-batch-bar" class="flex flex-wrap items-center justify-between gap-1.5 bg-slate-950/70 px-2.5 py-1.5 rounded-lg border border-slate-800">
-              <span class="text-xs text-slate-300 font-bold">🤖 AI 電腦性格一鍵套用：</span>
-              <div class="flex gap-1.5">
+            <div class="flex flex-wrap items-center justify-between gap-1.5 bg-slate-950/70 px-2.5 py-1.5 rounded-lg border border-slate-800">
+              <div id="host-ai-batch-bar" class="flex flex-wrap items-center gap-1.5">
+                <span class="text-xs text-slate-300 font-bold">🤖 AI 性格：</span>
                 <button data-batch-ai="sniper" class="px-2 py-0.5 rounded bg-rose-900/70 hover:bg-rose-800 border border-rose-500/40 text-[11px] text-rose-200 font-bold">🎁 放槍王</button>
                 <button data-batch-ai="standard" class="px-2 py-0.5 rounded bg-sky-900/70 hover:bg-sky-800 border border-sky-500/40 text-[11px] text-sky-200 font-bold">🙂 普通</button>
                 <button data-batch-ai="god" class="px-2 py-0.5 rounded bg-amber-900/70 hover:bg-amber-800 border border-amber-500/40 text-[11px] text-amber-200 font-bold">👑 麻將神</button>
               </div>
+              <button id="lobby-mic-btn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-bold text-slate-200">
+                🎙️ 開啟語音對談
+              </button>
             </div>
 
             <div id="waiting-seats-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
@@ -294,7 +300,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：對戰途中若有真人玩家離開或斷線，系統將立即顯示「真人離線\AI代打」並自動介入接手，牌局不中斷。
+      提示：真人開啟麥克風即可與線上牌友直接對談（開麥者打牌不觸發系統報牌，AI 依舊報牌）；離線自動切換「真人離線\AI代打」。
     </div>
   </div>
 
@@ -306,9 +312,12 @@
         <span id="table-rule-tag" class="px-2 py-1 rounded bg-slate-950/75 border border-amber-500/30 text-[11px] sm:text-xs font-bold text-amber-300">🇹🇼 台灣16張</span>
         <span id="table-room-tag" class="hidden sm:inline-block px-2 py-1 rounded bg-slate-950/60 border border-slate-700 text-[11px] font-mono text-slate-300">房號: -----</span>
       </div>
-      <div class="flex items-center gap-1 sm:gap-1.5">
+      <div class="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
+        <button id="game-mic-btn" class="px-2 py-1 rounded bg-slate-950/85 hover:bg-slate-800 border border-slate-600 text-[11px] sm:text-xs text-slate-200 font-bold">
+          🎙️ 開麥
+        </button>
         <button id="game-fullscreen-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-emerald-200 font-bold">⛶ 全螢幕</button>
-        <button id="quick-voice-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-sky-200 font-bold">🗣️ 語音開</button>
+        <button id="quick-voice-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-sky-200 font-bold">🗣️ 報牌開</button>
         <button id="quick-bgm-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-amber-200 font-bold">🎵 音樂關</button>
         <button id="game-settings-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-amber-300 font-bold">⚙️ 設定</button>
         <button id="game-exit-btn" class="px-2 py-1 rounded bg-rose-950/85 hover:bg-rose-800 border border-rose-500/40 text-[11px] sm:text-xs text-rose-200 font-bold">離開</button>
@@ -448,7 +457,7 @@
         </div>
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-sky-200">2. 繁體中文語音報牌</span>
+            <span class="font-bold text-sky-200">2. 繁體中文語音報牌（真人開麥時該玩家自動不報牌）</span>
             <input id="voice-toggle" type="checkbox" checked class="w-4 h-4 accent-amber-400" />
           </div>
           <div class="flex items-center justify-between">
@@ -456,7 +465,7 @@
             <input id="sfx-toggle" type="checkbox" checked class="w-4 h-4 accent-amber-400" />
           </div>
           <div>
-            <label class="block text-slate-300 mb-1">音效與語音音量 (<span id="sfx-vol-label">80</span>%)</label>
+            <label class="block text-slate-300 mb-1">音效與報牌音量 (<span id="sfx-vol-label">80</span>%)</label>
             <input id="sfx-vol-slider" type="range" min="0" max="100" value="80" class="w-full accent-amber-400" />
           </div>
         </div>
@@ -558,6 +567,15 @@
         window.speechSynthesis.speak(utter);
       } catch (e) {}
     }
+    // 依據玩家是否為真人且已開啟麥克風，決定是否執行系統語音報牌
+    speakForSeat(seatIdx, text) {
+      const p = gameState.players[seatIdx];
+      if (p && !p.isAI && p.micEnabled) {
+        // 真人玩家開啟麥克風時，該真人玩家打牌與喊牌不觸發系統報牌語音
+        return;
+      }
+      this.speak(text);
+    }
     setBGM(enabled) {
       this.bgmEnabled = enabled;
       if (this.customAudio) {
@@ -605,7 +623,176 @@
   const audioEngine = new AudioMediaEngine();
 
   /* ==========================================================================
-     2. 牌面圖形與 SVG 向量渲染（筒子圓形、條子竹節/孔雀、繁體書法字）
+     2. 真人玩家 WebRTC 線上麥克風語音對談引擎（全網狀點對點通話）
+     ========================================================================== */
+  class VoiceChatEngine {
+    constructor() {
+      this.localStream = null;
+      this.isMicOn = false;
+      this.mediaCalls = {}; // remotePeerId -> MediaConnection
+      this.audioEls = {};   // remotePeerId -> HTMLAudioElement
+    }
+
+    async toggleMic() {
+      if (this.isMicOn) {
+        this.stopMic();
+      } else {
+        await this.startMic();
+      }
+    }
+
+    async startMic() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('目前瀏覽器不支援麥克風語音存取，請確認使用 HTTPS 網址（如 GitHub Pages）或允許麥克風權限。');
+        return;
+      }
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        });
+        this.isMicOn = true;
+        this.updateMicButtonsUI();
+        this.syncMicStatusToRoom(true);
+        this.dialAllHumanPeers();
+      } catch (err) {
+        alert('無法取得麥克風權限，請在瀏覽器網址列允許麥克風使用後再試。');
+      }
+    }
+
+    stopMic() {
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(track => track.stop());
+        this.localStream = null;
+      }
+      Object.values(this.mediaCalls).forEach(call => {
+        try { call.close(); } catch (e) {}
+      });
+      this.mediaCalls = {};
+      this.isMicOn = false;
+      this.updateMicButtonsUI();
+      this.syncMicStatusToRoom(false);
+    }
+
+    syncMicStatusToRoom(enabled) {
+      gameState.players[mySeatIndex].micEnabled = enabled;
+      if (isHost) {
+        broadcastLobbyState();
+        if (gameState.phase !== 'LOBBY') {
+          broadcastGameState();
+          renderGameTable();
+        } else {
+          renderWaitingSeats();
+        }
+      } else if (hostConn && hostConn.open) {
+        hostConn.send({
+          type: 'MIC_STATUS',
+          seatIndex: mySeatIndex,
+          peerId: myPeerId,
+          micEnabled: enabled
+        });
+        if (gameState.phase !== 'LOBBY') renderGameTable();
+        else renderWaitingSeats();
+      }
+    }
+
+    // 撥號給房間內所有其他真人玩家（支援房主與訪客、訪客與訪客全網狀對談）
+    dialAllHumanPeers() {
+      if (!this.isMicOn || !this.localStream || !peer || peer.disconnected) return;
+      gameState.players.forEach((p, idx) => {
+        if (idx === mySeatIndex || p.isAI || !p.peerId) return;
+        const targetPid = p.peerId;
+        if (this.mediaCalls[targetPid] && this.mediaCalls[targetPid].open) return;
+        try {
+          const call = peer.call(targetPid, this.localStream);
+          if (call) {
+            this.bindMediaCall(targetPid, call);
+          }
+        } catch (e) {}
+      });
+    }
+
+    // 接聽其他真人玩家撥入的語音通話
+    handleIncomingCall(call) {
+      if (!call) return;
+      const remotePid = call.peer;
+      try {
+        call.answer(this.isMicOn && this.localStream ? this.localStream : undefined);
+        this.bindMediaCall(remotePid, call);
+      } catch (e) {}
+    }
+
+    bindMediaCall(remotePid, call) {
+      this.mediaCalls[remotePid] = call;
+      call.on('stream', (remoteStream) => {
+        this.attachRemoteAudio(remotePid, remoteStream);
+      });
+      call.on('close', () => {
+        this.removeRemoteAudio(remotePid);
+        delete this.mediaCalls[remotePid];
+      });
+      call.on('error', () => {
+        this.removeRemoteAudio(remotePid);
+        delete this.mediaCalls[remotePid];
+      });
+    }
+
+    attachRemoteAudio(remotePid, stream) {
+      const container = document.getElementById('remote-voice-container');
+      let audioEl = this.audioEls[remotePid];
+      if (!audioEl) {
+        audioEl = document.createElement('audio');
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        container.appendChild(audioEl);
+        this.audioEls[remotePid] = audioEl;
+      }
+      audioEl.srcObject = stream;
+      audioEl.play().catch(() => {});
+    }
+
+    removeRemoteAudio(remotePid) {
+      if (this.audioEls[remotePid]) {
+        try {
+          this.audioEls[remotePid].srcObject = null;
+          this.audioEls[remotePid].remove();
+        } catch (e) {}
+        delete this.audioEls[remotePid];
+      }
+    }
+
+    updateMicButtonsUI() {
+      const lobbyBtn = document.getElementById('lobby-mic-btn');
+      const gameBtn = document.getElementById('game-mic-btn');
+      if (this.isMicOn) {
+        if (lobbyBtn) {
+          lobbyBtn.textContent = '🟢 麥克風已開（對談中）';
+          lobbyBtn.className = 'px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 border border-emerald-300 text-[11px] font-black text-white shadow';
+        }
+        if (gameBtn) {
+          gameBtn.textContent = '🟢 麥克風開';
+          gameBtn.className = 'px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 border border-emerald-300 text-[11px] sm:text-xs text-white font-black shadow';
+        }
+      } else {
+        if (lobbyBtn) {
+          lobbyBtn.textContent = '🎙️ 開啟語音對談';
+          lobbyBtn.className = 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-bold text-slate-200';
+        }
+        if (gameBtn) {
+          gameBtn.textContent = '🎙️ 開麥';
+          gameBtn.className = 'px-2 py-1 rounded bg-slate-950/85 hover:bg-slate-800 border border-slate-600 text-[11px] sm:text-xs text-slate-200 font-bold';
+        }
+      }
+    }
+  }
+  const voiceChat = new VoiceChatEngine();
+
+  /* ==========================================================================
+     3. 牌面圖形與 SVG 向量渲染（筒子圓形、條子竹節/孔雀、繁體書法字）
      ========================================================================== */
   const WAN_NUMS = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
   const HONOR_MAP = {
@@ -734,7 +921,7 @@
   }
 
   /* ==========================================================================
-     3. 牌庫、排序、吃碰槓與胡牌判定引擎
+     4. 牌庫、排序、吃碰槓與胡牌判定引擎
      ========================================================================== */
   const TILE_ORDER = {};
   ['m', 'p', 's'].forEach((s, si) => {
@@ -866,7 +1053,7 @@
   }
 
   /* ==========================================================================
-     4. 全域遊戲狀態與多人 P2P 連線控制（含「真人離線\AI代打」完整狀態追蹤）
+     5. 全域遊戲狀態與多人 P2P 連線控制（含「真人離線\AI代打」與「麥克風開關狀態」）
      ========================================================================== */
   const WINDS = ['E', 'S', 'W', 'N'];
   const WIND_NAMES = { E: '東風', S: '南風', W: '西風', N: '北風' };
@@ -901,10 +1088,10 @@
     claimResponses: {},
     turnDeadline: 0,
     players: [
-      { seat: 0, wind: 'E', name: '玩家1', originalName: '玩家1', peerId: 'HOST', isAI: false, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', originalName: 'AI 電腦 (南)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', originalName: 'AI 電腦 (西)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', originalName: 'AI 電腦 (北)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
+      { seat: 0, wind: 'E', name: '玩家1', originalName: '玩家1', peerId: 'HOST', isAI: false, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', originalName: 'AI 電腦 (南)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', originalName: 'AI 電腦 (西)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', originalName: 'AI 電腦 (北)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
     ]
   };
 
@@ -930,7 +1117,7 @@
   }
 
   /* ==========================================================================
-     5. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
+     6. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
      ========================================================================== */
   function convertSeatToAI(seatIdx, reasonDetail = '斷線或離開') {
     if (!isHost) return;
@@ -938,15 +1125,19 @@
     if (!p || (p.isAI && p.offlineTakeover)) return;
 
     const baseName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
-    if (p.peerId && guestConns[p.peerId]) {
-      try { guestConns[p.peerId].close(); } catch (e) {}
-      delete guestConns[p.peerId];
+    if (p.peerId) {
+      voiceChat.removeRemoteAudio(p.peerId);
+      if (guestConns[p.peerId]) {
+        try { guestConns[p.peerId].close(); } catch (e) {}
+        delete guestConns[p.peerId];
+      }
     }
     delete guestLastSeen[seatIdx];
 
     p.originalName = baseName;
     p.isAI = true;
     p.offlineTakeover = true;
+    p.micEnabled = false;
     p.peerId = null;
     p.name = `${baseName} (${OFFLINE_AI_LABEL})`;
     if (!p.aiPersonality) p.aiPersonality = 'standard';
@@ -959,7 +1150,6 @@
       return;
     }
 
-    // 若該玩家正處於吃/碰/槓/胡決策階段，立即交由 AI 補齊回應或自動過牌
     if (gameState.phase === 'CLAIM' && gameState.pendingClaims[seatIdx] && !gameState.claimResponses[seatIdx]) {
       const opt = gameState.pendingClaims[seatIdx];
       if (opt.canHu) {
@@ -983,13 +1173,11 @@
     renderGameTable();
     document.getElementById('turn-status-banner').textContent = `🤖 ${noticeText}（${reasonDetail}）`;
 
-    // 若剛好輪到該座位出牌，立即排程 AI 接手出牌
     if (gameState.phase === 'PLAYING' && gameState.turnIndex === seatIdx) {
       scheduleHostAITurn();
     }
   }
 
-  // 訪客端：關閉視窗、切出頁面或斷網時立即通報房主切換「真人離線\AI代打」
   function notifyHostImLeaving() {
     if (!isHost && hostConn && hostConn.open) {
       try {
@@ -1000,7 +1188,7 @@
   window.addEventListener('beforeunload', notifyHostImLeaving);
   window.addEventListener('pagehide', notifyHostImLeaving);
 
-  // 雙向心跳檢測（偵測手機鎖屏、網路瞬間斷線等無 close 事件的靜默離線）
+  // 雙向心跳檢測
   setInterval(() => {
     if (isHost) {
       const now = Date.now();
@@ -1021,7 +1209,7 @@
   }, 3000);
 
   /* ==========================================================================
-     6. 房主與訪客 PeerJS 連線建置（含沙盒離線降級）
+     7. 房主與訪客 PeerJS 連線建置（含語音通話接聽與沙盒離線降級）
      ========================================================================== */
   function enterWaitingRoomUI() {
     document.getElementById('lobby-setup-panel').classList.add('hidden');
@@ -1054,6 +1242,9 @@
       const offlineBadge = p.offlineTakeover
         ? `<span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-orange-600/90 text-white text-[10px] font-black">${OFFLINE_AI_LABEL}</span>`
         : '';
+      const micBadge = (!p.isAI && p.micEnabled)
+        ? `<span class="ml-1 px-1 py-0.2 rounded bg-emerald-600 text-white text-[10px] font-bold">🎙️開麥</span>`
+        : '';
 
       const aiSelect = (isHost && p.isAI) ? `
         ${offlineBadge}
@@ -1062,7 +1253,7 @@
           <option value="standard" ${p.aiPersonality === 'standard' ? 'selected' : ''}>🙂 普通</option>
           <option value="god" ${p.aiPersonality === 'god' ? 'selected' : ''}>👑 麻將神</option>
         </select>` : `<div class="mt-1.5 text-[11px] font-bold ${p.offlineTakeover ? 'text-orange-300' : (p.isAI ? 'text-sky-300' : 'text-emerald-300')}">
-          ${p.offlineTakeover ? `🤖 ${OFFLINE_AI_LABEL}` : (p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : '🟢 真人已入座'))}
+          ${p.offlineTakeover ? `🤖 ${OFFLINE_AI_LABEL}` : (p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : '🟢 真人已入座'))}${micBadge}
         </div>`;
 
       return `<div class="rounded-xl p-2 border ${isMe ? 'bg-emerald-950/70 border-amber-400' : (p.offlineTakeover ? 'bg-orange-950/40 border-orange-500/60' : 'bg-slate-950/80 border-slate-800')}">
@@ -1099,6 +1290,7 @@
         peerId: p.peerId,
         isAI: p.isAI,
         offlineTakeover: !!p.offlineTakeover,
+        micEnabled: !!p.micEnabled,
         aiPersonality: p.aiPersonality,
         score: p.score
       }))
@@ -1136,7 +1328,11 @@
       peer = new Peer('MJROOM-' + roomCode);
       peer.on('open', (id) => {
         myPeerId = id;
+        gameState.players[0].peerId = id;
         enterWaitingRoomUI();
+      });
+      peer.on('call', (call) => {
+        voiceChat.handleIncomingCall(call);
       });
       peer.on('connection', (conn) => {
         conn.on('data', (data) => handleHostReceiveData(conn, data));
@@ -1183,7 +1379,7 @@
         hostConn.on('open', () => {
           isHost = false;
           roomCode = code;
-          hostConn.send({ type: 'JOIN_REQUEST', name: myName, peerId: myPeerId });
+          hostConn.send({ type: 'JOIN_REQUEST', name: myName, peerId: myPeerId, micEnabled: voiceChat.isMicOn });
         });
         hostConn.on('data', (data) => handleGuestReceiveData(data));
         hostConn.on('close', () => {
@@ -1191,6 +1387,9 @@
           alert('與房主的連線已中斷。');
           location.reload();
         });
+      });
+      peer.on('call', (call) => {
+        voiceChat.handleIncomingCall(call);
       });
       peer.on('error', () => {
         isJoining = false;
@@ -1212,22 +1411,35 @@
       return;
     }
 
+    if (data.type === 'MIC_STATUS') {
+      const sIdx = typeof data.seatIndex === 'number'
+        ? data.seatIndex
+        : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
+      if (sIdx >= 0 && gameState.players[sIdx]) {
+        gameState.players[sIdx].micEnabled = !!data.micEnabled;
+        if (gameState.phase === 'LOBBY') {
+          renderWaitingSeats();
+          broadcastLobbyState();
+        } else {
+          broadcastGameState();
+          renderGameTable();
+        }
+      }
+      return;
+    }
+
     if (data.type === 'JOIN_REQUEST') {
       const pid = data.peerId || conn.peer;
       const cleanName = (data.name || '').trim();
       guestConns[pid] = conn;
 
-      // 1. 防止同一連線重複佔位
       let seatIdx = gameState.players.findIndex(p => p.peerId === pid);
-      // 2. 若之前同名真人離線由 AI 暫代（offlineTakeover），允許重連取回原座位並恢復真人身份
       if (seatIdx === -1 && cleanName) {
         seatIdx = gameState.players.findIndex(p => p.offlineTakeover && p.originalName === cleanName);
       }
-      // 3. 尋找一般 AI 空位
       if (seatIdx === -1) {
         seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI && !p.offlineTakeover);
       }
-      // 4. 若已無純 AI 空位，可補入離線代打座位
       if (seatIdx === -1) {
         seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI);
       }
@@ -1243,6 +1455,7 @@
       gameState.players[seatIdx].peerId = pid;
       gameState.players[seatIdx].isAI = false;
       gameState.players[seatIdx].offlineTakeover = false;
+      gameState.players[seatIdx].micEnabled = !!data.micEnabled;
       guestLastSeen[seatIdx] = Date.now();
 
       conn.send({
@@ -1253,6 +1466,8 @@
       });
       renderWaitingSeats();
       broadcastLobbyState();
+      voiceChat.dialAllHumanPeers();
+
       if (gameState.phase !== 'LOBBY') {
         if (wasTakeover) {
           showActionBanner(`🟢 ${finalName} 已重新連線回歸！`);
@@ -1289,6 +1504,7 @@
       roomCode = data.roomCode;
       Object.assign(gameState, data.state);
       enterWaitingRoomUI();
+      voiceChat.dialAllHumanPeers();
       if (gameState.phase !== 'LOBBY') {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
@@ -1300,12 +1516,21 @@
       gameState.turnTimeLimit = data.turnTimeLimit;
       gameState.players = data.players;
       renderWaitingSeats();
+      voiceChat.dialAllHumanPeers();
     } else if (data.type === 'DEAL_ANIMATION') {
       runAnimatedDealSequence(false);
     } else if (data.type === 'GAME_STATE') {
       lastStateUpdatedAt = Date.now();
       const prevPhase = gameState.phase;
+      const prevDiscard = gameState.lastDiscard;
       Object.assign(gameState, data.state);
+
+      // 訪客端偵測到新出牌時，依該出牌者是否為開麥真人決定是否播報語音
+      if (gameState.lastDiscard && (!prevDiscard || prevDiscard.tile !== gameState.lastDiscard.tile || prevDiscard.fromSeat !== gameState.lastDiscard.fromSeat)) {
+        audioEngine.playTileClack(1.0);
+        audioEngine.speakForSeat(gameState.lastDiscard.fromSeat, getTileSpokenName(gameState.lastDiscard.tile));
+      }
+
       if (prevPhase === 'LOBBY' && gameState.phase !== 'LOBBY') {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
@@ -1314,6 +1539,7 @@
         showActionBanner(`🤖 ${data.takeoverAlert}`);
         audioEngine.speak('真人離線，AI代打');
       }
+      voiceChat.dialAllHumanPeers();
       renderGameTable();
     } else if (data.type === 'HOST_CLOSED') {
       alert('房主已解散牌桌，即將返回大廳。');
@@ -1322,7 +1548,7 @@
   }
 
   /* ==========================================================================
-     7. 洗牌、發牌動畫與開局補花流程
+     8. 洗牌、發牌動畫與開局補花流程
      ========================================================================== */
   document.getElementById('start-game-btn').addEventListener('click', () => {
     if (!isHost) return;
@@ -1414,7 +1640,7 @@
   }
 
   /* ==========================================================================
-     8. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
+     9. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
      ========================================================================== */
   function showActionBanner(text) {
     const box = document.getElementById('action-banner-fx');
@@ -1446,7 +1672,7 @@
     }
     if (flowerCount > 0) {
       showActionBanner('補花！');
-      audioEngine.speak('補花');
+      audioEngine.speakForSeat(seatIdx, '補花');
     }
     if (!tile) {
       finishRoundAsDraw();
@@ -1508,7 +1734,8 @@
       gameState.lastDiscard = { tile, fromSeat: seatIdx };
 
       audioEngine.playTileClack(1.0);
-      audioEngine.speak(getTileSpokenName(tile));
+      // 核心規則：真人玩家開啟麥克風時，該真人玩家打牌不報牌；AI玩家依舊會報牌
+      audioEngine.speakForSeat(seatIdx, getTileSpokenName(tile));
 
       const claims = {};
       for (let offset = 1; offset <= 3; offset++) {
@@ -1614,7 +1841,7 @@
       claimer.melds.push({ type: 'KONG', tiles: [tile, tile, tile, tile] });
       showActionBanner('槓！');
       audioEngine.playActionChime('action');
-      audioEngine.speak('槓');
+      audioEngine.speakForSeat(s, '槓');
       hostDrawTileForSeat(s);
       return;
     }
@@ -1628,7 +1855,7 @@
       claimer.melds.push({ type: 'PONG', tiles: [tile, tile, tile] });
       showActionBanner('碰！');
       audioEngine.playActionChime('action');
-      audioEngine.speak('碰');
+      audioEngine.speakForSeat(s, '碰');
       gameState.phase = 'PLAYING';
       gameState.turnIndex = s;
       gameState.pendingClaims = {};
@@ -1653,7 +1880,7 @@
       claimer.melds.push({ type: 'CHOW', tiles: sortTiles([tile, ...pair]) });
       showActionBanner('吃！');
       audioEngine.playActionChime('action');
-      audioEngine.speak('吃');
+      audioEngine.speakForSeat(s, '吃');
       gameState.phase = 'PLAYING';
       gameState.turnIndex = s;
       gameState.pendingClaims = {};
@@ -1727,7 +1954,7 @@
 
     showActionBanner(isSelfDraw ? '自摸胡牌！' : '胡牌！');
     audioEngine.playActionChime('win');
-    audioEngine.speak(isSelfDraw ? '自摸胡牌' : '胡牌');
+    audioEngine.speakForSeat(winnerSeat, isSelfDraw ? '自摸胡牌' : '胡牌');
     broadcastGameState();
     renderGameTable();
   }
@@ -1743,7 +1970,7 @@
   }
 
   /* ==========================================================================
-     9. 牌桌畫面渲染（相對於 mySeatIndex 的下/右/對/左視角 + 醒目標示「真人離線\AI代打」）
+     10. 牌桌畫面渲染（相對於 mySeatIndex 的視角 + 麥克風狀態 + 真人離線\AI代打標示）
      ========================================================================== */
   function renderGameTable() {
     const ruleTagMap = { tw16: '🇹🇼 台灣16張', jp13: '🇯🇵 日本立直', hk13: '🇭🇰 廣東13張' };
@@ -1763,9 +1990,13 @@
         <span class="px-1 rounded bg-red-600 text-white font-bold">${WIND_NAMES[p.wind][0]}</span>`;
 
       const displayPlayerName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
+      const micBadge = (!p.isAI && p.micEnabled)
+        ? `<span class="px-1 py-0.2 rounded bg-emerald-600 text-white text-[10px] font-bold animate-pulse" title="麥克風開啟中（打牌不報牌）">🎙️</span>`
+        : (!p.isAI ? `<span class="text-[10px] text-slate-400" title="麥克風關閉">🔇</span>` : '');
+
       const aiTag = p.offlineTakeover
         ? `<span class="px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-black tracking-tight shadow-sm">${OFFLINE_AI_LABEL}</span>`
-        : (p.isAI ? `<span class="px-1 rounded bg-sky-500/25 text-sky-300 text-[10px]">${AI_LABELS[p.aiPersonality] || 'AI'}</span>` : '');
+        : (p.isAI ? `<span class="px-1 rounded bg-sky-500/25 text-sky-300 text-[10px]">${AI_LABELS[p.aiPersonality] || 'AI'}</span>` : micBadge);
       const flowerHtml = p.flowers.map(renderFlowerMiniBadge).join('');
 
       const infoEl = document.getElementById(`info-${pos}`);
@@ -1846,7 +2077,9 @@
     if (gameState.phase === 'PLAYING') {
       const curP = gameState.players[gameState.turnIndex];
       if (gameState.turnIndex === mySeatIndex) {
-        banner.textContent = `👉 輪到您出牌（點擊兩下打出，超時自動代打）`;
+        banner.textContent = voiceChat.isMicOn
+          ? `👉 輪到您出牌（🎙️您已開麥，打牌不報牌）`
+          : `👉 輪到您出牌（點擊兩下打出，超時自動代打）`;
         if (canHuStandard(curP.hand)) {
           actionBar.classList.remove('hidden');
           actionBar.innerHTML = `<button id="btn-self-hu" class="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-black text-base shadow-xl border-2 border-amber-300 animate-bounce">🀄 自摸胡牌！</button>`;
@@ -1949,7 +2182,7 @@
   });
 
   /* ==========================================================================
-     10. 倒數計時器、防卡死看門狗與催牌機制
+     11. 倒數計時器、防卡死看門狗與催牌機制
      ========================================================================== */
   setInterval(() => {
     if (gameState.phase !== 'PLAYING' && gameState.phase !== 'CLAIM') return;
@@ -1999,8 +2232,11 @@
   });
 
   /* ==========================================================================
-     11. 介面按鈕事件（全螢幕、複製邀請網址、離開房間、設定彈窗）
+     12. 介面按鈕事件（麥克風語音對談、全螢幕、複製邀請網址、離開房間、設定彈窗）
      ========================================================================== */
+  document.getElementById('lobby-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
+  document.getElementById('game-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
+
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -2035,6 +2271,7 @@
   });
 
   function leaveCurrentRoom() {
+    voiceChat.stopMic();
     if (isHost) {
       Object.values(guestConns).forEach(c => {
         if (c && c.open) c.send({ type: 'HOST_CLOSED' });
@@ -2068,7 +2305,7 @@
 
   document.getElementById('voice-toggle').onchange = (e) => {
     audioEngine.voiceEnabled = e.target.checked;
-    document.getElementById('quick-voice-btn').textContent = audioEngine.voiceEnabled ? '🗣️ 語音開' : '🔇 語音關';
+    document.getElementById('quick-voice-btn').textContent = audioEngine.voiceEnabled ? '🗣️ 報牌開' : '🔇 報牌關';
   };
   document.getElementById('quick-voice-btn').onclick = () => {
     const cb = document.getElementById('voice-toggle');
