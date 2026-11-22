@@ -185,7 +185,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 語音對談（麥克風與喇叭雙向 300% 增益） · 已開局台主授權審核 · 手機螢幕恆亮防休眠
+          台灣16張 · 日本立直 · 廣東13張 ｜ 台主離線依序自動交接不散桌 · 語音對談 · 螢幕恆亮防休眠
         </p>
       </div>
 
@@ -201,7 +201,7 @@
         <!-- 左側：開設新牌桌 -->
         <div class="bg-slate-900/80 border border-emerald-500/35 rounded-xl p-3.5 sm:p-4 flex flex-col justify-between lobby-card">
           <div>
-            <h2 class="text-base sm:text-lg font-bold text-emerald-300 mb-2.5">🏠 開設新牌桌（當房主）</h2>
+            <h2 class="text-base sm:text-lg font-bold text-emerald-300 mb-2.5">🏠 開設新牌桌（當台主）</h2>
             <div class="space-y-2.5">
               <div>
                 <label class="block text-xs text-slate-300 mb-1">1. 選擇麻將玩法規則</label>
@@ -236,7 +236,7 @@
           <div>
             <h2 class="text-base sm:text-lg font-bold text-amber-300 mb-2">🔗 加入好友牌桌</h2>
             <p class="text-xs text-slate-300 mb-3 leading-relaxed">
-              請向房主索取 <span class="text-amber-300 font-bold">5 碼房間代碼</span>，或直接掃描房主畫面上的 QR Code／開啟專屬連結自動填入。（若牌局已開打，需等待台主核准方可入座）
+              請向台主索取 <span class="text-amber-300 font-bold">5 碼房間代碼</span>，或直接掃描台主畫面上的 QR Code／開啟專屬連結自動填入。（若牌局已開打，需等待台主核准方可入座）
             </p>
             <div>
               <label class="block text-xs text-slate-300 mb-1">輸入房間代碼</label>
@@ -323,7 +323,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：已啟用「☀️ 螢幕恆亮」防休眠鎖定，手機對戰中不會自動關螢幕斷線（請勿開啟手機系統省電模式）。
+      提示：若台主離線，系統將依加入先後順序自動交由下一位真人接手成為新台主，直到房內無任何真人才關閉該房號。
     </div>
   </div>
 
@@ -454,7 +454,7 @@
       <div id="shuffle-stage-text" class="mt-4 text-lg sm:text-2xl font-black text-amber-300 tracking-wider">正在洗牌...</div>
     </div>
 
-    <!-- ==================== 動作特效提示（吃／碰／槓／補花／胡牌／離線代打） ==================== -->
+    <!-- ==================== 動作特效提示（吃／碰／槓／補花／胡牌／台主交接／離線代打） ==================== -->
     <div id="action-banner-fx" class="hidden pointer-events-none absolute inset-0 z-40 flex items-center justify-center px-4">
       <div id="action-banner-text" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-black text-2xl sm:text-4xl shadow-2xl border-2 border-white text-center">
         補花！
@@ -711,9 +711,7 @@
               this.updateUI();
             });
           }
-        } catch (err) {
-          // 部分手機省電模式下可能暫時拒絕，切回前景時會自動重試
-        }
+        } catch (err) {}
       }
       this.updateUI();
     }
@@ -747,7 +745,7 @@
           if (audioEngine.ctx && audioEngine.ctx.state === 'running') {
             const osc = audioEngine.ctx.createOscillator();
             const gain = audioEngine.ctx.createGain();
-            gain.gain.value = 0.00001; // 人耳完全聽不到的極微弱訊號，防止瀏覽器分頁休眠
+            gain.gain.value = 0.00001;
             osc.connect(gain);
             gain.connect(audioEngine.ctx.destination);
             osc.start();
@@ -1467,7 +1465,7 @@
   }
 
   /* ==========================================================================
-     6. 全域遊戲狀態、防踢除座位保護與台主中途加入審核佇列
+     6. 全域遊戲狀態、加入順序紀錄（joinOrder）與台主離線自動交接架構
      ========================================================================== */
   const WINDS = ['E', 'S', 'W', 'N'];
   const WIND_NAMES = { E: '東風', S: '南風', W: '西風', N: '北風' };
@@ -1476,8 +1474,8 @@
 
   let peer = null;
   let hostConn = null;
-  let guestConns = {};      // peerId -> DataConnection（已正式入座的真人）
-  let pendingJoinQueue = []; // [{ peerId, name, micEnabled, conn, requestedAt }]（已開局後排隊等待台主授權）
+  let guestConns = {};      // peerId -> DataConnection（台主端使用）
+  let pendingJoinQueue = []; // [{ peerId, name, micEnabled, conn, requestedAt }]
   let guestLastSeen = {};   // seatIdx -> timestamp
   let isHost = false;
   let myPeerId = '';
@@ -1489,12 +1487,15 @@
   let claimWatchdogTimeout = null;
   let lastStateUpdatedAt = Date.now();
   let isJoining = false;
+  let isMigratingHost = false;
+  let nextJoinOrderSeq = 2;
 
   let gameState = {
     phase: 'LOBBY', // LOBBY | DEALING | PLAYING | CLAIM | ROUND_END
     ruleMode: 'tw16',
     shuffleMode: 'electric',
     turnTimeLimit: 12,
+    hostSeatIndex: 0, // 目前擔任台主（房主）的座位索引
     dealerIndex: 0,
     roundWind: 'E',
     turnIndex: 0,
@@ -1504,10 +1505,10 @@
     claimResponses: {},
     turnDeadline: 0,
     players: [
-      { seat: 0, wind: 'E', name: '玩家1', originalName: '玩家1', peerId: 'HOST', isAI: false, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', originalName: 'AI 電腦 (南)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', originalName: 'AI 電腦 (西)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', originalName: 'AI 電腦 (北)', peerId: null, isAI: true, offlineTakeover: false, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
+      { seat: 0, wind: 'E', name: '玩家1', originalName: '玩家1', peerId: 'HOST', isAI: false, offlineTakeover: false, joinOrder: 1, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', originalName: 'AI 電腦 (南)', peerId: null, isAI: true, offlineTakeover: false, joinOrder: 999, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', originalName: 'AI 電腦 (西)', peerId: null, isAI: true, offlineTakeover: false, joinOrder: 999, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', originalName: 'AI 電腦 (北)', peerId: null, isAI: true, offlineTakeover: false, joinOrder: 999, micEnabled: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
     ]
   };
 
@@ -1532,17 +1533,217 @@
   }
 
   /* ==========================================================================
-     7. 台主授權「已開局中途加入」審核介面與防踢除機制
+     7. 台主（房主）離線交接引擎（Host Migration）：依序由加入順序最前的真人接手
+     ========================================================================== */
+  function getSortedHumanCandidates(excludeSeatIdx = -1) {
+    return gameState.players
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p, idx }) => idx !== excludeSeatIdx && !p.isAI && p.peerId)
+      .sort((a, b) => (a.p.joinOrder || 999) - (b.p.joinOrder || 999) || a.idx - b.idx);
+  }
+
+  function initiateHostMigration(departedHostSeatIdx) {
+    if (isMigratingHost) return;
+    isMigratingHost = true;
+
+    const oldHost = gameState.players[departedHostSeatIdx];
+    const oldHostName = oldHost ? (oldHost.originalName || oldHost.name.replace(/\s*\(真人離線\\AI代打\)/g, '')) : '原台主';
+
+    // 將離線的舊台主座位轉為「真人離線\AI代打」
+    if (oldHost && !oldHost.isAI) {
+      if (oldHost.peerId) voiceChat.removeRemoteAudio(oldHost.peerId);
+      oldHost.originalName = oldHostName;
+      oldHost.isAI = true;
+      oldHost.offlineTakeover = true;
+      oldHost.micEnabled = false;
+      oldHost.peerId = null;
+      oldHost.joinOrder = 999;
+      oldHost.name = `${oldHostName} (${OFFLINE_AI_LABEL})`;
+      if (!oldHost.aiPersonality) oldHost.aiPersonality = 'standard';
+    }
+
+    // 依照 joinOrder 找出加入順序最前面的真人玩家接手台主
+    const candidates = getSortedHumanCandidates(-1);
+    if (candidates.length === 0) {
+      // 房內已無任何真人玩家，關閉該房號
+      alert('牌桌內已無任何真人玩家，即將關閉房間並返回大廳。');
+      location.reload();
+      return;
+    }
+
+    const successor = candidates[0];
+    const newHostSeatIdx = successor.idx;
+    const newHostPeerId = `MJROOM-${roomCode}-H${newHostSeatIdx}`;
+    gameState.hostSeatIndex = newHostSeatIdx;
+
+    if (newHostSeatIdx === mySeatIndex) {
+      // ★ 本機就是加入順序第一的真人玩家，正式接手成為新台主（房主）！
+      promoteSelfToNewHost(newHostPeerId, oldHostName);
+    } else {
+      // ★ 本機是其他順位真人玩家，自動將 DataConnection 重連至新台主
+      reconnectGuestToNewHost(newHostPeerId, successor.p.name);
+    }
+  }
+
+  function promoteSelfToNewHost(newHostPeerId, oldHostName) {
+    isHost = true;
+    hostConn = null;
+    guestConns = {};
+    pendingJoinQueue = [];
+    guestLastSeen = {};
+
+    const myPlayer = gameState.players[mySeatIndex];
+    const oldMyPeerId = myPeerId;
+
+    // 暫時清空其他真人的 peerId，等待他們自動向新台主重綁連線
+    gameState.players.forEach((p, idx) => {
+      if (idx !== mySeatIndex && !p.isAI) {
+        if (p.peerId) voiceChat.removeRemoteAudio(p.peerId);
+        p.peerId = null;
+      }
+    });
+
+    if (peer) {
+      try { peer.destroy(); } catch (e) {}
+    }
+
+    peer = new Peer(newHostPeerId);
+    peer.on('open', (id) => {
+      myPeerId = id;
+      myPlayer.peerId = id;
+      isMigratingHost = false;
+
+      // 重新計算最大 joinOrder 序號
+      const maxOrder = gameState.players.reduce((m, p) => (!p.isAI && p.joinOrder < 900 ? Math.max(m, p.joinOrder) : m), 1);
+      nextJoinOrderSeq = maxOrder + 1;
+
+      const takeoverMsg = `👑 原台主離線，由您接手新台主！（${oldHostName} ${OFFLINE_AI_LABEL}）`;
+      showActionBanner('👑 您已接手成為新台主！');
+      audioEngine.playActionChime('action');
+      audioEngine.speak('原台主離線，由您接手新台主');
+
+      if (gameState.phase === 'LOBBY') {
+        enterWaitingRoomUI();
+        document.getElementById('lobby-status-msg').textContent = takeoverMsg;
+      } else {
+        renderGameTable();
+        document.getElementById('turn-status-banner').textContent = takeoverMsg;
+        resumeHostGameLoopAfterMigration();
+      }
+    });
+
+    peer.on('call', (call) => {
+      voiceChat.handleIncomingCall(call);
+    });
+
+    peer.on('connection', (conn) => {
+      conn.on('data', (data) => handleHostReceiveData(conn, data));
+      conn.on('close', () => {
+        const qIdx = pendingJoinQueue.findIndex(item => item.conn === conn || item.peerId === conn.peer);
+        if (qIdx !== -1) {
+          pendingJoinQueue.splice(qIdx, 1);
+          renderHostApprovalUI(false);
+          return;
+        }
+        const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
+        if (seatIdx >= 0 && seatIdx !== mySeatIndex) {
+          convertSeatToAI(seatIdx, '已斷線離桌');
+        }
+      });
+      conn.on('error', () => {
+        const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
+        if (seatIdx >= 0 && seatIdx !== mySeatIndex) {
+          convertSeatToAI(seatIdx, '連線異常中斷');
+        }
+      });
+    });
+
+    peer.on('error', () => {
+      isMigratingHost = false;
+    });
+  }
+
+  function reconnectGuestToNewHost(newHostPeerId, newHostName) {
+    if (gameState.phase !== 'LOBBY') {
+      document.getElementById('turn-status-banner').textContent = `🔄 原台主離線，正在自動連線至新台主「${newHostName}」...`;
+    } else {
+      document.getElementById('lobby-status-msg').textContent = `🔄 原台主離線，正在自動連線至新台主「${newHostName}」...`;
+    }
+
+    setTimeout(() => {
+      try {
+        if (!peer || peer.disconnected) {
+          peer = new Peer();
+          peer.on('open', (id) => {
+            myPeerId = id;
+            dialNewHostDataConn(newHostPeerId, newHostName);
+          });
+          peer.on('call', (call) => voiceChat.handleIncomingCall(call));
+        } else {
+          dialNewHostDataConn(newHostPeerId, newHostName);
+        }
+      } catch (e) {
+        isMigratingHost = false;
+      }
+    }, 900);
+  }
+
+  function dialNewHostDataConn(newHostPeerId, newHostName) {
+    hostConn = peer.connect(newHostPeerId, { reliable: true });
+    hostConn.on('open', () => {
+      isHost = false;
+      isMigratingHost = false;
+      hostConn.send({
+        type: 'REBIND_GUEST',
+        seatIndex: mySeatIndex,
+        peerId: myPeerId,
+        name: gameState.players[mySeatIndex]?.originalName || getPlayerNameInput(),
+        micEnabled: voiceChat.isMicOn
+      });
+      showActionBanner(`👑 已交接新台主：${newHostName}`);
+    });
+    hostConn.on('data', (data) => handleGuestReceiveData(data));
+    hostConn.on('close', () => {
+      if (!isMigratingHost) {
+        // 若新台主之後也離線，再度依加入順序往下交接給下一位真人！
+        initiateHostMigration(gameState.hostSeatIndex);
+      }
+    });
+  }
+
+  function resumeHostGameLoopAfterMigration() {
+    if (!isHost) return;
+    if (gameState.phase === 'PLAYING') {
+      const curP = gameState.players[gameState.turnIndex];
+      if (curP && curP.isAI) {
+        scheduleHostAITurn();
+      }
+    } else if (gameState.phase === 'CLAIM') {
+      Object.entries(gameState.pendingClaims).forEach(([sStr, opt]) => {
+        const s = parseInt(sStr, 10);
+        const p = gameState.players[s];
+        if (p && p.isAI && !gameState.claimResponses[s]) {
+          gameState.claimResponses[s] = opt.canHu ? { type: 'HU' } : { type: 'PASS' };
+        }
+      });
+      if (Object.keys(gameState.pendingClaims).every(k => !!gameState.claimResponses[k])) {
+        resolveClaimPhase();
+      }
+    }
+    broadcastGameState();
+  }
+
+  /* ==========================================================================
+     8. 台主授權「已開局中途加入」審核介面與防踢除機制
      ========================================================================== */
   function findAvailableAISeatForNewPlayer(cleanName) {
-    // 嚴格規則：絕對只挑選 p.isAI === true 的座位，現有在線真人（p.isAI === false）受保護絕不會被踢除
     if (cleanName) {
-      const sameOfflineSeat = gameState.players.findIndex((p, i) => i > 0 && p.isAI && p.offlineTakeover && p.originalName === cleanName);
+      const sameOfflineSeat = gameState.players.findIndex((p, i) => i !== mySeatIndex && p.isAI && p.offlineTakeover && p.originalName === cleanName);
       if (sameOfflineSeat !== -1) return sameOfflineSeat;
     }
-    const normalAISeat = gameState.players.findIndex((p, i) => i > 0 && p.isAI && !p.offlineTakeover);
+    const normalAISeat = gameState.players.findIndex((p, i) => i !== mySeatIndex && p.isAI && !p.offlineTakeover);
     if (normalAISeat !== -1) return normalAISeat;
-    return gameState.players.findIndex((p, i) => i > 0 && p.isAI);
+    return gameState.players.findIndex((p, i) => i !== mySeatIndex && p.isAI);
   }
 
   function renderHostApprovalUI(autoOpenModal = false) {
@@ -1567,7 +1768,7 @@
 
     const availableSeats = gameState.players
       .map((p, idx) => ({ p, idx }))
-      .filter(({ p, idx }) => idx > 0 && p.isAI);
+      .filter(({ p, idx }) => idx !== mySeatIndex && p.isAI);
 
     body.innerHTML = pendingJoinQueue.map((req, qIdx) => {
       const seatOptionsHtml = availableSeats.length > 0
@@ -1624,7 +1825,7 @@
     if (!req) return;
 
     let seatIdx = targetSeatIdx;
-    if (seatIdx <= 0 || !gameState.players[seatIdx] || !gameState.players[seatIdx].isAI) {
+    if (seatIdx < 0 || seatIdx === mySeatIndex || !gameState.players[seatIdx] || !gameState.players[seatIdx].isAI) {
       seatIdx = findAvailableAISeatForNewPlayer(req.name);
     }
 
@@ -1644,6 +1845,7 @@
     gameState.players[seatIdx].peerId = pid;
     gameState.players[seatIdx].isAI = false;
     gameState.players[seatIdx].offlineTakeover = false;
+    gameState.players[seatIdx].joinOrder = nextJoinOrderSeq++;
     gameState.players[seatIdx].micEnabled = !!req.micEnabled;
     guestLastSeen[seatIdx] = Date.now();
 
@@ -1688,10 +1890,10 @@
   });
 
   /* ==========================================================================
-     8. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
+     9. 一般訪客真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
      ========================================================================== */
   function convertSeatToAI(seatIdx, reasonDetail = '斷線或離開') {
-    if (!isHost) return;
+    if (!isHost || seatIdx === mySeatIndex) return;
     const p = gameState.players[seatIdx];
     if (!p || (p.isAI && p.offlineTakeover)) return;
 
@@ -1710,6 +1912,7 @@
     p.offlineTakeover = true;
     p.micEnabled = false;
     p.peerId = null;
+    p.joinOrder = 999;
     p.name = `${baseName} (${OFFLINE_AI_LABEL})`;
     if (!p.aiPersonality) p.aiPersonality = 'standard';
 
@@ -1749,21 +1952,28 @@
     }
   }
 
-  function notifyHostImLeaving() {
-    if (!isHost && hostConn && hostConn.open) {
+  function notifyPeersBeforeUnload() {
+    if (isHost) {
+      // 台主關閉分頁時，主動通知所有訪客立即啟動台主交接
+      Object.values(guestConns).forEach(c => {
+        if (c && c.open) {
+          try { c.send({ type: 'HOST_MIGRATE_LEAVE', departedSeat: mySeatIndex }); } catch (e) {}
+        }
+      });
+    } else if (hostConn && hostConn.open) {
       try {
         hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId });
       } catch (e) {}
     }
   }
-  window.addEventListener('beforeunload', notifyHostImLeaving);
-  window.addEventListener('pagehide', notifyHostImLeaving);
+  window.addEventListener('beforeunload', notifyPeersBeforeUnload);
+  window.addEventListener('pagehide', notifyPeersBeforeUnload);
 
   setInterval(() => {
     if (isHost) {
       const now = Date.now();
       gameState.players.forEach((p, idx) => {
-        if (idx > 0 && !p.isAI && p.peerId) {
+        if (idx !== mySeatIndex && !p.isAI && p.peerId) {
           const conn = guestConns[p.peerId];
           const lastPing = guestLastSeen[idx] || now;
           if (!conn || !conn.open || (now - lastPing > 9000)) {
@@ -1771,7 +1981,7 @@
           }
         }
       });
-    } else if (hostConn && hostConn.open && mySeatIndex > 0) {
+    } else if (hostConn && hostConn.open && !isMigratingHost) {
       try {
         hostConn.send({ type: 'HEARTBEAT', seatIndex: mySeatIndex, peerId: myPeerId });
       } catch (e) {}
@@ -1779,7 +1989,7 @@
   }, 3000);
 
   /* ==========================================================================
-     9. 房主與訪客 PeerJS 連線建置（含已開局授權驗證與防踢除邏輯）
+     10. 房主與訪客 PeerJS 連線建置（含已開局授權驗證與接手重綁邏輯）
      ========================================================================== */
   function enterWaitingRoomUI() {
     document.getElementById('lobby-setup-panel').classList.add('hidden');
@@ -1809,6 +2019,7 @@
     const grid = document.getElementById('waiting-seats-grid');
     grid.innerHTML = gameState.players.map((p, idx) => {
       const isMe = idx === mySeatIndex;
+      const isCurrentHost = idx === gameState.hostSeatIndex;
       const offlineBadge = p.offlineTakeover
         ? `<span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-orange-600/90 text-white text-[10px] font-black">${OFFLINE_AI_LABEL}</span>`
         : '';
@@ -1823,13 +2034,13 @@
           <option value="standard" ${p.aiPersonality === 'standard' ? 'selected' : ''}>🙂 普通</option>
           <option value="god" ${p.aiPersonality === 'god' ? 'selected' : ''}>👑 麻將神</option>
         </select>` : `<div class="mt-1.5 text-[11px] font-bold ${p.offlineTakeover ? 'text-orange-300' : (p.isAI ? 'text-sky-300' : 'text-emerald-300')}">
-          ${p.offlineTakeover ? `🤖 ${OFFLINE_AI_LABEL}` : (p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : '🟢 真人已入座'))}${micBadge}
+          ${p.offlineTakeover ? `🤖 ${OFFLINE_AI_LABEL}` : (p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : `🟢 真人 (順位#${p.joinOrder || idx + 1})`))}${micBadge}
         </div>`;
 
       return `<div class="rounded-xl p-2 border ${isMe ? 'bg-emerald-950/70 border-amber-400' : (p.offlineTakeover ? 'bg-orange-950/40 border-orange-500/60' : 'bg-slate-950/80 border-slate-800')}">
         <div class="flex items-center justify-between text-[11px]">
           <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">${WIND_NAMES[p.wind]}</span>
-          <span class="text-slate-400">${idx === 0 ? '房主/莊' : '座位 ' + (idx + 1)}</span>
+          <span class="text-slate-400">${isCurrentHost ? '👑 台主' : '座位 ' + (idx + 1)}</span>
         </div>
         <div class="mt-1 font-bold text-xs sm:text-sm text-white truncate" title="${p.name}">${p.name}</div>
         ${aiSelect}
@@ -1852,6 +2063,7 @@
       ruleMode: gameState.ruleMode,
       shuffleMode: gameState.shuffleMode,
       turnTimeLimit: gameState.turnTimeLimit,
+      hostSeatIndex: gameState.hostSeatIndex,
       players: gameState.players.map(p => ({
         seat: p.seat,
         wind: p.wind,
@@ -1860,6 +2072,7 @@
         peerId: p.peerId,
         isAI: p.isAI,
         offlineTakeover: !!p.offlineTakeover,
+        joinOrder: p.joinOrder || 999,
         micEnabled: !!p.micEnabled,
         aiPersonality: p.aiPersonality,
         score: p.score
@@ -1890,11 +2103,14 @@
 
     isHost = true;
     mySeatIndex = 0;
+    gameState.hostSeatIndex = 0;
     roomCode = generateRoomCode();
     gameState.players[0].name = myName;
     gameState.players[0].originalName = myName;
     gameState.players[0].isAI = false;
     gameState.players[0].offlineTakeover = false;
+    gameState.players[0].joinOrder = 1;
+    nextJoinOrderSeq = 2;
 
     try {
       peer = new Peer('MJROOM-' + roomCode);
@@ -1916,13 +2132,13 @@
             return;
           }
           const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
-          if (seatIdx > 0) {
+          if (seatIdx >= 0 && seatIdx !== mySeatIndex) {
             convertSeatToAI(seatIdx, '已斷線離桌');
           }
         });
         conn.on('error', () => {
           const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
-          if (seatIdx > 0) {
+          if (seatIdx >= 0 && seatIdx !== mySeatIndex) {
             convertSeatToAI(seatIdx, '連線異常中斷');
           }
         });
@@ -1992,9 +2208,9 @@
         hostConn.on('close', () => {
           if (gameState.phase === 'LOBBY' && document.getElementById('waiting-room-panel').classList.contains('hidden')) {
             resetJoinLobbyUI('連線已關閉或未獲授權。');
-          } else {
-            alert('與房主的連線已中斷。');
-            location.reload();
+          } else if (!isMigratingHost) {
+            // ★ 原台主離線斷線，觸發「依加入順序交接新台主」流程，不解散牌桌！
+            initiateHostMigration(gameState.hostSeatIndex);
           }
         });
       });
@@ -2015,7 +2231,29 @@
       const sIdx = typeof data.seatIndex === 'number'
         ? data.seatIndex
         : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
-      if (sIdx > 0) guestLastSeen[sIdx] = Date.now();
+      if (sIdx >= 0 && sIdx !== mySeatIndex) guestLastSeen[sIdx] = Date.now();
+      return;
+    }
+
+    if (data.type === 'REBIND_GUEST') {
+      // 台主交接後，其他在線真人重新綁定至新台主
+      const sIdx = data.seatIndex;
+      const pid = data.peerId || conn.peer;
+      if (typeof sIdx === 'number' && gameState.players[sIdx] && !gameState.players[sIdx].isAI) {
+        guestConns[pid] = conn;
+        gameState.players[sIdx].peerId = pid;
+        gameState.players[sIdx].micEnabled = !!data.micEnabled;
+        guestLastSeen[sIdx] = Date.now();
+        voiceChat.dialAllHumanPeers(true);
+        if (data.micEnabled) voiceChat.requestMissingStreams();
+        if (gameState.phase === 'LOBBY') {
+          renderWaitingSeats();
+          broadcastLobbyState();
+        } else {
+          broadcastGameState();
+          renderGameTable();
+        }
+      }
       return;
     }
 
@@ -2088,6 +2326,7 @@
         gameState.players[candidateSeat].peerId = pid;
         gameState.players[candidateSeat].isAI = false;
         gameState.players[candidateSeat].offlineTakeover = false;
+        gameState.players[candidateSeat].joinOrder = nextJoinOrderSeq++;
         gameState.players[candidateSeat].micEnabled = !!data.micEnabled;
         guestLastSeen[candidateSeat] = Date.now();
 
@@ -2123,7 +2362,7 @@
 
       conn.send({
         type: 'JOIN_PENDING_APPROVAL',
-        message: '牌局已開始，已送出加入申請，正在等待台主（房主）授權...'
+        message: '牌局已開始，已送出加入申請，正在等待台主授權...'
       });
       audioEngine.playActionChime('action');
       renderHostApprovalUI(true);
@@ -2132,7 +2371,7 @@
       const seatIdx = typeof data.seatIndex === 'number'
         ? data.seatIndex
         : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
-      if (seatIdx > 0) {
+      if (seatIdx >= 0 && seatIdx !== mySeatIndex) {
         convertSeatToAI(seatIdx, '主動離開牌桌');
       }
     } else if (data.type === 'PLAYER_ACTION') {
@@ -2146,6 +2385,11 @@
 
   function handleGuestReceiveData(data) {
     if (!data || !data.type) return;
+    if (data.type === 'HOST_MIGRATE_LEAVE') {
+      // 台主主動按離開，立即啟動順位交接
+      initiateHostMigration(typeof data.departedSeat === 'number' ? data.departedSeat : gameState.hostSeatIndex);
+      return;
+    }
     if (data.type === 'VOICE_REQUEST_CALL') {
       if (data.targetPeerId) {
         voiceChat.dialSinglePeer(data.targetPeerId, true);
@@ -2179,6 +2423,7 @@
       gameState.ruleMode = data.ruleMode;
       gameState.shuffleMode = data.shuffleMode;
       gameState.turnTimeLimit = data.turnTimeLimit;
+      if (typeof data.hostSeatIndex === 'number') gameState.hostSeatIndex = data.hostSeatIndex;
       gameState.players = data.players;
       renderWaitingSeats();
       voiceChat.dialAllHumanPeers(false);
@@ -2208,13 +2453,13 @@
       voiceChat.requestMissingStreams();
       renderGameTable();
     } else if (data.type === 'HOST_CLOSED') {
-      alert('房主已解散牌桌，即將返回大廳。');
+      alert('牌桌已關閉，即將返回大廳。');
       location.reload();
     }
   }
 
   /* ==========================================================================
-     10. 洗牌、發牌動畫與開局補花流程
+     11. 洗牌、發牌動畫與開局補花流程
      ========================================================================== */
   document.getElementById('start-game-btn').addEventListener('click', () => {
     wakeLockManager.enable();
@@ -2308,7 +2553,7 @@
   }
 
   /* ==========================================================================
-     11. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
+     12. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
      ========================================================================== */
   function showActionBanner(text) {
     const box = document.getElementById('action-banner-fx');
@@ -2637,7 +2882,7 @@
   }
 
   /* ==========================================================================
-     12. 牌桌畫面渲染（相對於 mySeatIndex 的視角 + 麥克風狀態 + 真人離線\AI代打標示）
+     13. 牌桌畫面渲染（相對於 mySeatIndex 的視角 + 麥克風狀態 + 台主徽章 + 真人離線\AI代打標示）
      ========================================================================== */
   function renderGameTable() {
     const ruleTagMap = { tw16: '🇹🇼 台灣16張', jp13: '🇯🇵 日本立直', hk13: '🇭🇰 廣東13張' };
@@ -2653,7 +2898,9 @@
 
       const isTurn = gameState.phase === 'PLAYING' && gameState.turnIndex === seatIdx;
       const isDealer = seatIdx === gameState.dealerIndex;
-      const badge = `${isDealer ? '<span class="px-1 rounded bg-amber-500 text-slate-950 font-black">莊</span>' : ''}
+      const isTableHost = seatIdx === gameState.hostSeatIndex && !p.isAI;
+      const badge = `${isTableHost ? '<span class="px-1 rounded bg-purple-600 text-white font-black" title="目前台主">👑</span>' : ''}
+        ${isDealer ? '<span class="px-1 rounded bg-amber-500 text-slate-950 font-black">莊</span>' : ''}
         <span class="px-1 rounded bg-red-600 text-white font-bold">${WIND_NAMES[p.wind][0]}</span>`;
 
       const displayPlayerName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
@@ -2840,7 +3087,7 @@
     }
 
     const nextBtn = document.getElementById('next-round-btn');
-    nextBtn.textContent = isHost ? '🀄 確定 / 開始下一局' : '⏳ 等待房主開始下一局...';
+    nextBtn.textContent = isHost ? '🀄 確定 / 開始下一局' : '⏳ 等待台主開始下一局...';
     nextBtn.disabled = !isHost;
   }
 
@@ -2849,7 +3096,7 @@
   });
 
   /* ==========================================================================
-     13. 倒數計時器、防卡死看門狗與催牌機制
+     14. 倒數計時器、防卡死看門狗與催牌機制
      ========================================================================== */
   setInterval(() => {
     if (gameState.phase !== 'PLAYING' && gameState.phase !== 'CLAIM') return;
@@ -2899,7 +3146,7 @@
   });
 
   /* ==========================================================================
-     14. 介面按鈕事件（螢幕恆亮切換、麥克風與喇叭雙向大小聲滑桿、全螢幕、離開房間、設定彈窗）
+     15. 介面按鈕事件（螢幕恆亮切換、麥克風與喇叭雙向大小聲滑桿、全螢幕、離開房間、設定彈窗）
      ========================================================================== */
   document.getElementById('lobby-wakelock-btn').addEventListener('click', () => wakeLockManager.toggle());
   document.getElementById('game-wakelock-btn').addEventListener('click', () => wakeLockManager.toggle());
@@ -2971,16 +3218,30 @@
     wakeLockManager.disable();
     voiceChat.stopMic();
     if (isHost) {
-      Object.values(guestConns).forEach(c => {
-        if (c && c.open) c.send({ type: 'HOST_CLOSED' });
-      });
+      // 台主離開時，通知所有訪客立即依加入順序交接新台主；唯有完全沒有其他真人時才結束房間
+      const otherHumans = getSortedHumanCandidates(mySeatIndex);
+      if (otherHumans.length > 0) {
+        Object.values(guestConns).forEach(c => {
+          if (c && c.open) {
+            try { c.send({ type: 'HOST_MIGRATE_LEAVE', departedSeat: mySeatIndex }); } catch (e) {}
+          }
+        });
+      } else {
+        Object.values(guestConns).forEach(c => {
+          if (c && c.open) {
+            try { c.send({ type: 'HOST_CLOSED' }); } catch (e) {}
+          }
+        });
+      }
       pendingJoinQueue.forEach(req => {
-        if (req.conn && req.conn.open) req.conn.send({ type: 'HOST_CLOSED' });
+        if (req.conn && req.conn.open) {
+          try { req.conn.send({ type: 'HOST_CLOSED' }); } catch (e) {}
+        }
       });
     } else if (hostConn && hostConn.open) {
-      hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId });
+      try { hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId }); } catch (e) {}
     }
-    setTimeout(() => location.reload(), 120);
+    setTimeout(() => location.reload(), 150);
   }
   document.getElementById('leave-room-btn').addEventListener('click', leaveCurrentRoom);
   document.getElementById('game-exit-btn').addEventListener('click', leaveCurrentRoom);
