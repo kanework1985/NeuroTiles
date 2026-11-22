@@ -182,7 +182,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 語音對談（麥克風與喇叭雙向 300% 增益放大） · 真人離線\AI代打
+          台灣16張 · 日本立直 · 廣東13張 ｜ 語音對談（麥克風與喇叭雙向 300% 增益） · 已開局台主授權審核 · 真人離線\AI代打
         </p>
       </div>
 
@@ -233,7 +233,7 @@
           <div>
             <h2 class="text-base sm:text-lg font-bold text-amber-300 mb-2">🔗 加入好友牌桌</h2>
             <p class="text-xs text-slate-300 mb-3 leading-relaxed">
-              請向房主索取 <span class="text-amber-300 font-bold">5 碼房間代碼</span>，或直接掃描房主畫面上的 QR Code／開啟專屬連結自動填入。
+              請向房主索取 <span class="text-amber-300 font-bold">5 碼房間代碼</span>，或直接掃描房主畫面上的 QR Code／開啟專屬連結自動填入。（若牌局已開打，需等待台主核准方可入座）
             </p>
             <div>
               <label class="block text-xs text-slate-300 mb-1">輸入房間代碼</label>
@@ -242,9 +242,14 @@
             </div>
             <p id="lobby-status-msg" class="text-xs text-emerald-300 mt-2 min-h-[18px]"></p>
           </div>
-          <button id="join-room-btn" class="mt-3 w-full py-2.5 sm:py-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.99] text-white font-black text-sm sm:text-base shadow-lg transition">
-            連線加入房間
-          </button>
+          <div class="mt-3 flex gap-2">
+            <button id="join-room-btn" class="flex-1 py-2.5 sm:py-3 rounded-xl bg-amber-600 hover:bg-amber-500 active:scale-[0.99] text-white font-black text-sm sm:text-base shadow-lg transition">
+              連線加入房間
+            </button>
+            <button id="cancel-join-btn" class="hidden px-3.5 py-2.5 rounded-xl bg-rose-800 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm">
+              取消等待
+            </button>
+          </div>
         </div>
       </div>
 
@@ -315,7 +320,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：若電腦收聽手機語音偏小，可直接拉高頂部「🔊 喇叭增益滑桿（最高 300%）」；開麥者打牌不觸發系統報牌，AI 依舊報牌。
+      提示：開局後若有第 3 位真人欲連線，須由台主授權方可接管 AI 座位，且現有在線真人絕不會被踢除。
     </div>
   </div>
 
@@ -326,6 +331,10 @@
       <div class="flex items-center gap-1.5">
         <span id="table-rule-tag" class="px-2 py-1 rounded bg-slate-950/75 border border-amber-500/30 text-[11px] sm:text-xs font-bold text-amber-300">🇹🇼 台灣16張</span>
         <span id="table-room-tag" class="hidden sm:inline-block px-2 py-1 rounded bg-slate-950/60 border border-slate-700 text-[11px] font-mono text-slate-300">房號: -----</span>
+        <!-- 房主待審核加入提醒徽章 -->
+        <button id="host-pending-badge-btn" class="hidden px-2 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] sm:text-xs font-black animate-pulse shadow">
+          🔔 有人申請加入 (1)
+        </button>
       </div>
       <div class="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
         <!-- 麥克風與喇叭增益雙向控制條 -->
@@ -466,7 +475,21 @@
     </div>
   </div>
 
-  <!-- ==================== 4. 音效、音樂與牌面設定彈窗 ==================== -->
+  <!-- ==================== 4. 台主授權「已開局中途加入」審核視窗 ==================== -->
+  <div id="host-join-approval-modal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3">
+    <div class="w-full max-w-md max-h-[90dvh] bg-slate-900 border-2 border-amber-400 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div class="shrink-0 px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+        <h3 class="text-base sm:text-lg font-black text-amber-300">🔔 牌局進行中：新真人玩家申請加入</h3>
+        <button id="minimize-approval-btn" class="text-xs px-2 py-1 rounded bg-slate-800 text-slate-300 hover:text-white">稍後處理</button>
+      </div>
+      <div id="host-join-approval-body" class="flex-1 overflow-y-auto p-4 space-y-3 text-xs sm:text-sm"></div>
+      <div class="shrink-0 px-4 py-2.5 bg-slate-950 border-t border-slate-800 text-[11px] text-slate-400 text-center">
+        僅會接替 AI 電腦空位，現有已連線的真人玩家座位均受保護不會被踢除。
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 5. 音效、音樂與牌面設定彈窗 ==================== -->
   <div id="settings-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3">
     <div class="w-full max-w-md max-h-[92dvh] bg-slate-900 border border-amber-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
       <div class="shrink-0 px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
@@ -660,8 +683,7 @@
   const audioEngine = new AudioMediaEngine();
 
   /* ==========================================================================
-     2. 真人玩家 WebRTC 線上麥克風語音對談引擎
-        （含遠端喇叭 50%~300% WebAudio 動態壓縮增益放大，解決電腦音量只有 40% 問題）
+     2. 真人玩家 WebRTC 線上麥克風語音對談引擎（含遠端喇叭 50%~300% WebAudio 放大）
      ========================================================================== */
   class VoiceChatEngine {
     constructor() {
@@ -671,15 +693,14 @@
       this.micGainNode = null;
       this.micGainValue = 1.0;
 
-      // 遠端接收端喇叭增益放大管線（解決電腦通話壓低音量導致只有40%的問題）
       this.playbackCtx = null;
-      this.speakerGainValue = 1.8; // 預設 180% 放大，最高 300%
-      this.remoteNodes = {};       // remotePeerId -> { source, compressor, gainNode }
+      this.speakerGainValue = 1.8;
+      this.remoteNodes = {};
 
       this.isMicOn = false;
-      this.mediaCalls = {};    // remotePeerId -> MediaConnection
-      this.audioEls = {};      // remotePeerId -> HTMLAudioElement
-      this.remoteStreams = {}; // remotePeerId -> MediaStream
+      this.mediaCalls = {};
+      this.audioEls = {};
+      this.remoteStreams = {};
       this.playbackBlocked = false;
     }
 
@@ -697,7 +718,6 @@
       const clamped = Math.max(50, Math.min(300, Number(percent) || 100));
       this.speakerGainValue = clamped / 100;
 
-      // 即時更新所有已連線手機端語音的喇叭放大倍率
       Object.values(this.remoteNodes).forEach(nodePack => {
         if (nodePack && nodePack.gainNode && this.playbackCtx) {
           try {
@@ -726,7 +746,6 @@
       Object.entries(this.audioEls).forEach(([pid, audioEl]) => {
         if (!audioEl) return;
         const hasWebAudioBoost = !!this.remoteNodes[pid];
-        // 若已由 WebAudio GainNode 放大輸出，HTMLAudio 設為靜音僅維持串流活躍，避免雙重回音；若無則直接播
         audioEl.muted = hasWebAudioBoost;
         audioEl.volume = 1.0;
         const p = audioEl.play();
@@ -859,6 +878,7 @@
     }
 
     syncMicStatusToRoom(enabled) {
+      if (!gameState.players[mySeatIndex]) return;
       gameState.players[mySeatIndex].micEnabled = enabled;
       if (isHost) {
         broadcastLobbyState();
@@ -951,7 +971,6 @@
       }
       audioEl.srcObject = stream;
 
-      // 建立 Web Audio 動態壓縮 + 最高 300% 喇叭增益管線（解決電腦音量只有 40% 的問題）
       let webAudioReady = false;
       if (this.playbackCtx) {
         try {
@@ -967,7 +986,7 @@
           compressor.release.value = 0.2;
 
           const gainNode = this.playbackCtx.createGain();
-          gainNode.gain.value = this.speakerGainValue; // 預設 180%，最高可調至 300%
+          gainNode.gain.value = this.speakerGainValue;
 
           source.connect(compressor);
           compressor.connect(gainNode);
@@ -979,7 +998,6 @@
         }
       }
 
-      // 在 Chrome 中必須啟動 audioEl.play() 以驅動 WebRTC 音軌解碼；若已接上 WebAudio 增益則靜音原標籤避免重複疊音
       audioEl.muted = webAudioReady;
       audioEl.volume = 1.0;
 
@@ -1332,7 +1350,7 @@
   }
 
   /* ==========================================================================
-     5. 全域遊戲狀態與多人 P2P 連線控制（含「真人離線\AI代打」與「麥克風開關狀態」）
+     5. 全域遊戲狀態、防踢除座位保護與台主中途加入審核佇列
      ========================================================================== */
   const WINDS = ['E', 'S', 'W', 'N'];
   const WIND_NAMES = { E: '東風', S: '南風', W: '西風', N: '北風' };
@@ -1341,8 +1359,9 @@
 
   let peer = null;
   let hostConn = null;
-  let guestConns = {}; // peerId -> DataConnection
-  let guestLastSeen = {}; // seatIdx -> timestamp
+  let guestConns = {};      // peerId -> DataConnection（已正式入座的真人）
+  let pendingJoinQueue = []; // [{ peerId, name, micEnabled, conn, requestedAt }]（已開局後排隊等待台主授權）
+  let guestLastSeen = {};   // seatIdx -> timestamp
   let isHost = false;
   let myPeerId = '';
   let mySeatIndex = 0;
@@ -1352,6 +1371,7 @@
   let hostActionTimeout = null;
   let claimWatchdogTimeout = null;
   let lastStateUpdatedAt = Date.now();
+  let isJoining = false;
 
   let gameState = {
     phase: 'LOBBY', // LOBBY | DEALING | PLAYING | CLAIM | ROUND_END
@@ -1395,7 +1415,168 @@
   }
 
   /* ==========================================================================
-     6. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
+     6. 台主授權「已開局中途加入」審核介面與防踢除機制
+     ========================================================================== */
+  function findAvailableAISeatForNewPlayer(cleanName) {
+    // 嚴格規則：絕對只挑選 p.isAI === true 的座位，現有在線真人（p.isAI === false）受保護絕不會被踢除
+    // 1. 若有同名真人離線由 AI 暫代（offlineTakeover），優先配對該原座位
+    if (cleanName) {
+      const sameOfflineSeat = gameState.players.findIndex((p, i) => i > 0 && p.isAI && p.offlineTakeover && p.originalName === cleanName);
+      if (sameOfflineSeat !== -1) return sameOfflineSeat;
+    }
+    // 2. 其次找一般 AI 電腦空位
+    const normalAISeat = gameState.players.findIndex((p, i) => i > 0 && p.isAI && !p.offlineTakeover);
+    if (normalAISeat !== -1) return normalAISeat;
+    // 3. 最後找任一其他離線代打 AI 空位
+    return gameState.players.findIndex((p, i) => i > 0 && p.isAI);
+  }
+
+  function renderHostApprovalUI(autoOpenModal = false) {
+    if (!isHost) return;
+    // 清理已斷線的排隊申請者
+    pendingJoinQueue = pendingJoinQueue.filter(item => item && item.conn && item.conn.open);
+
+    const badgeBtn = document.getElementById('host-pending-badge-btn');
+    const modal = document.getElementById('host-join-approval-modal');
+    const body = document.getElementById('host-join-approval-body');
+
+    if (pendingJoinQueue.length === 0) {
+      badgeBtn.classList.add('hidden');
+      modal.classList.add('hidden');
+      return;
+    }
+
+    badgeBtn.classList.remove('hidden');
+    badgeBtn.textContent = `🔔 有人申請加入 (${pendingJoinQueue.length})`;
+    if (autoOpenModal) {
+      modal.classList.remove('hidden');
+    }
+
+    const availableSeats = gameState.players
+      .map((p, idx) => ({ p, idx }))
+      .filter(({ p, idx }) => idx > 0 && p.isAI);
+
+    body.innerHTML = pendingJoinQueue.map((req, qIdx) => {
+      const seatOptionsHtml = availableSeats.length > 0
+        ? availableSeats.map(({ p, idx }) => {
+            const label = p.offlineTakeover
+              ? `座位 ${idx + 1}（${WIND_NAMES[p.wind]} · ${p.originalName} ${OFFLINE_AI_LABEL}）`
+              : `座位 ${idx + 1}（${WIND_NAMES[p.wind]} · ${p.name}）`;
+            return `<option value="${idx}">${label}</option>`;
+          }).join('')
+        : `<option value="-1">目前無可用 AI 空位（4 位真人已滿）</option>`;
+
+      return `<div class="p-3 rounded-xl bg-slate-950 border border-amber-500/40 space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="font-black text-amber-300 text-sm">👤 申請玩家：${req.name}</span>
+          <span class="text-[11px] text-slate-400">排隊 #${qIdx + 1}</span>
+        </div>
+        <div>
+          <label class="block text-[11px] text-slate-300 mb-1">指派接替的 AI 座位（不會影響現有在線真人）：</label>
+          <select id="approve-seat-select-${qIdx}" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white">
+            ${seatOptionsHtml}
+          </select>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <button data-approve-idx="${qIdx}" ${availableSeats.length === 0 ? 'disabled' : ''} class="flex-1 py-2 rounded-lg ${availableSeats.length === 0 ? 'bg-slate-700 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'} font-black text-xs shadow">
+            ✅ 授權加入此座位
+          </button>
+          <button data-reject-idx="${qIdx}" class="px-3 py-2 rounded-lg bg-rose-800 hover:bg-rose-700 text-white font-bold text-xs">
+            ❌ 拒絕
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+
+    body.querySelectorAll('button[data-approve-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const qIdx = parseInt(btn.dataset.approveIdx, 10);
+        const sel = document.getElementById(`approve-seat-select-${qIdx}`);
+        const chosenSeat = sel ? parseInt(sel.value, 10) : -1;
+        approvePendingJoinRequest(qIdx, chosenSeat);
+      });
+    });
+
+    body.querySelectorAll('button[data-reject-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const qIdx = parseInt(btn.dataset.rejectIdx, 10);
+        rejectPendingJoinRequest(qIdx, '台主已婉拒中途加入申請');
+      });
+    });
+  }
+
+  function approvePendingJoinRequest(qIdx, targetSeatIdx) {
+    if (!isHost) return;
+    const req = pendingJoinQueue[qIdx];
+    if (!req) return;
+
+    // 再次確認目標座位確實是 AI 空位（雙重防踢除保險：絕不覆蓋現有在線真人）
+    let seatIdx = targetSeatIdx;
+    if (seatIdx <= 0 || !gameState.players[seatIdx] || !gameState.players[seatIdx].isAI) {
+      seatIdx = findAvailableAISeatForNewPlayer(req.name);
+    }
+
+    if (seatIdx === -1) {
+      rejectPendingJoinRequest(qIdx, '目前四位真人已滿座，無可用 AI 空位');
+      return;
+    }
+
+    pendingJoinQueue.splice(qIdx, 1);
+    const pid = req.peerId;
+    guestConns[pid] = req.conn;
+
+    const finalName = req.name || `玩家${seatIdx + 1}`;
+    const wasTakeover = gameState.players[seatIdx].offlineTakeover;
+    gameState.players[seatIdx].name = finalName;
+    gameState.players[seatIdx].originalName = finalName;
+    gameState.players[seatIdx].peerId = pid;
+    gameState.players[seatIdx].isAI = false;
+    gameState.players[seatIdx].offlineTakeover = false;
+    gameState.players[seatIdx].micEnabled = !!req.micEnabled;
+    guestLastSeen[seatIdx] = Date.now();
+
+    if (req.conn && req.conn.open) {
+      req.conn.send({
+        type: 'JOIN_ACCEPTED',
+        seatIndex: seatIdx,
+        roomCode,
+        state: gameState
+      });
+    }
+
+    showActionBanner(wasTakeover ? `🟢 ${finalName} 已獲台主授權回歸！` : `🟢 台主已授權 ${finalName} 加入座位 ${seatIdx + 1}！`);
+    audioEngine.playActionChime('action');
+    voiceChat.dialAllHumanPeers(true);
+    if (req.micEnabled) {
+      voiceChat.requestMissingStreams();
+    }
+
+    broadcastGameState();
+    renderGameTable();
+    renderHostApprovalUI(pendingJoinQueue.length > 0);
+  }
+
+  function rejectPendingJoinRequest(qIdx, reason) {
+    const req = pendingJoinQueue[qIdx];
+    if (!req) return;
+    pendingJoinQueue.splice(qIdx, 1);
+    if (req.conn && req.conn.open) {
+      try {
+        req.conn.send({ type: 'JOIN_REJECTED', reason: reason || '台主未授權加入此牌局' });
+      } catch (e) {}
+    }
+    renderHostApprovalUI(pendingJoinQueue.length > 0);
+  }
+
+  document.getElementById('host-pending-badge-btn').addEventListener('click', () => {
+    renderHostApprovalUI(true);
+  });
+  document.getElementById('minimize-approval-btn').addEventListener('click', () => {
+    document.getElementById('host-join-approval-modal').classList.add('hidden');
+  });
+
+  /* ==========================================================================
+     7. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
      ========================================================================== */
   function convertSeatToAI(seatIdx, reasonDetail = '斷線或離開') {
     if (!isHost) return;
@@ -1486,7 +1667,7 @@
   }, 3000);
 
   /* ==========================================================================
-     7. 房主與訪客 PeerJS 連線建置（含語音通話雙向重連與沙盒離線降級）
+     8. 房主與訪客 PeerJS 連線建置（含已開局授權驗證與防踢除邏輯）
      ========================================================================== */
   function enterWaitingRoomUI() {
     document.getElementById('lobby-setup-panel').classList.add('hidden');
@@ -1615,6 +1796,13 @@
       peer.on('connection', (conn) => {
         conn.on('data', (data) => handleHostReceiveData(conn, data));
         conn.on('close', () => {
+          // 若在排隊審核清單中斷線，自動移除排隊
+          const qIdx = pendingJoinQueue.findIndex(item => item.conn === conn || item.peerId === conn.peer);
+          if (qIdx !== -1) {
+            pendingJoinQueue.splice(qIdx, 1);
+            renderHostApprovalUI(false);
+            return;
+          }
           const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
           if (seatIdx > 0) {
             convertSeatToAI(seatIdx, '已斷線離桌');
@@ -1637,7 +1825,25 @@
     }
   });
 
-  let isJoining = false;
+  function resetJoinLobbyUI(msg = '') {
+    isJoining = false;
+    const joinBtn = document.getElementById('join-room-btn');
+    const cancelBtn = document.getElementById('cancel-join-btn');
+    joinBtn.disabled = false;
+    joinBtn.textContent = '連線加入房間';
+    joinBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+    cancelBtn.classList.add('hidden');
+    if (msg) document.getElementById('lobby-status-msg').textContent = msg;
+  }
+
+  document.getElementById('cancel-join-btn').addEventListener('click', () => {
+    if (hostConn && hostConn.open) {
+      try { hostConn.send({ type: 'CANCEL_JOIN_REQUEST', peerId: myPeerId }); } catch (e) {}
+      try { hostConn.close(); } catch (e) {}
+    }
+    resetJoinLobbyUI('已取消加入申請。');
+  });
+
   document.getElementById('join-room-btn').addEventListener('click', () => {
     voiceChat.unlockAllRemoteAudio();
     if (isJoining) return;
@@ -1647,10 +1853,19 @@
       return;
     }
     isJoining = true;
+    const joinBtn = document.getElementById('join-room-btn');
+    joinBtn.disabled = true;
+    joinBtn.textContent = '連線請求中...';
+    joinBtn.classList.add('opacity-60', 'cursor-not-allowed');
+    document.getElementById('cancel-join-btn').classList.remove('hidden');
+
     const myName = getPlayerNameInput();
     document.getElementById('lobby-status-msg').textContent = `正在連線至牌桌 ${code}...`;
 
     try {
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
       peer = new Peer();
       peer.on('open', (id) => {
         myPeerId = id;
@@ -1662,21 +1877,22 @@
         });
         hostConn.on('data', (data) => handleGuestReceiveData(data));
         hostConn.on('close', () => {
-          isJoining = false;
-          alert('與房主的連線已中斷。');
-          location.reload();
+          if (gameState.phase === 'LOBBY' && document.getElementById('waiting-room-panel').classList.contains('hidden')) {
+            resetJoinLobbyUI('連線已關閉或未獲授權。');
+          } else {
+            alert('與房主的連線已中斷。');
+            location.reload();
+          }
         });
       });
       peer.on('call', (call) => {
         voiceChat.handleIncomingCall(call);
       });
       peer.on('error', () => {
-        isJoining = false;
-        document.getElementById('lobby-status-msg').textContent = '找不到此房間或網路受限，請確認房號後重試。';
+        resetJoinLobbyUI('找不到此房間或網路受限，請確認房號後重試。');
       });
     } catch (e) {
-      isJoining = false;
-      document.getElementById('lobby-status-msg').textContent = '目前瀏覽器環境不支援外部連線。';
+      resetJoinLobbyUI('目前瀏覽器環境不支援外部連線。');
     }
   });
 
@@ -1722,56 +1938,88 @@
       return;
     }
 
+    if (data.type === 'CANCEL_JOIN_REQUEST') {
+      const pid = data.peerId || conn.peer;
+      pendingJoinQueue = pendingJoinQueue.filter(item => item.peerId !== pid);
+      renderHostApprovalUI(false);
+      return;
+    }
+
     if (data.type === 'JOIN_REQUEST') {
       const pid = data.peerId || conn.peer;
-      const cleanName = (data.name || '').trim();
-      guestConns[pid] = conn;
+      const cleanName = (data.name || '').trim() || '新申請玩家';
 
-      let seatIdx = gameState.players.findIndex(p => p.peerId === pid);
-      if (seatIdx === -1 && cleanName) {
-        seatIdx = gameState.players.findIndex(p => p.offlineTakeover && p.originalName === cleanName);
-      }
-      if (seatIdx === -1) {
-        seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI && !p.offlineTakeover);
-      }
-      if (seatIdx === -1) {
-        seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI);
-      }
-      if (seatIdx === -1) {
-        conn.send({ type: 'JOIN_REJECTED', reason: '牌桌人數已滿（4/4）' });
+      // 防踢除保護：若此 peerId 已經在座位上，直接重傳目前狀態，不重複佔用其他座位
+      const existingSeat = gameState.players.findIndex(p => !p.isAI && p.peerId === pid);
+      if (existingSeat !== -1) {
+        guestConns[pid] = conn;
+        guestLastSeen[existingSeat] = Date.now();
+        conn.send({
+          type: 'JOIN_ACCEPTED',
+          seatIndex: existingSeat,
+          roomCode,
+          state: gameState
+        });
         return;
       }
 
-      const finalName = cleanName || `玩家${seatIdx + 1}`;
-      const wasTakeover = gameState.players[seatIdx].offlineTakeover;
-      gameState.players[seatIdx].name = finalName;
-      gameState.players[seatIdx].originalName = finalName;
-      gameState.players[seatIdx].peerId = pid;
-      gameState.players[seatIdx].isAI = false;
-      gameState.players[seatIdx].offlineTakeover = false;
-      gameState.players[seatIdx].micEnabled = !!data.micEnabled;
-      guestLastSeen[seatIdx] = Date.now();
+      // 檢查是否還有任何 AI 空位（若 4 位真人皆已滿座，直接拒絕，絕不踢除現有在線真人）
+      const candidateSeat = findAvailableAISeatForNewPlayer(cleanName);
+      if (candidateSeat === -1) {
+        conn.send({ type: 'JOIN_REJECTED', reason: '牌桌 4 位真人已滿座，無法加入！' });
+        return;
+      }
+
+      // 【關鍵規則分流】
+      // 1. 若尚未開局（LOBBY 等待室階段）：直接補入空位
+      if (gameState.phase === 'LOBBY') {
+        guestConns[pid] = conn;
+        gameState.players[candidateSeat].name = cleanName;
+        gameState.players[candidateSeat].originalName = cleanName;
+        gameState.players[candidateSeat].peerId = pid;
+        gameState.players[candidateSeat].isAI = false;
+        gameState.players[candidateSeat].offlineTakeover = false;
+        gameState.players[candidateSeat].micEnabled = !!data.micEnabled;
+        guestLastSeen[candidateSeat] = Date.now();
+
+        conn.send({
+          type: 'JOIN_ACCEPTED',
+          seatIndex: candidateSeat,
+          roomCode,
+          state: gameState
+        });
+        renderWaitingSeats();
+        broadcastLobbyState();
+        voiceChat.dialAllHumanPeers(true);
+        if (data.micEnabled) {
+          voiceChat.requestMissingStreams();
+        }
+        return;
+      }
+
+      // 2. 若「已開局」狀態：不可直接接上，必須進入待審核佇列並通知台主（房主）授權！
+      const alreadyQueued = pendingJoinQueue.find(item => item.peerId === pid);
+      if (alreadyQueued) {
+        alreadyQueued.conn = conn;
+        alreadyQueued.name = cleanName;
+        alreadyQueued.micEnabled = !!data.micEnabled;
+      } else {
+        pendingJoinQueue.push({
+          peerId: pid,
+          name: cleanName,
+          micEnabled: !!data.micEnabled,
+          conn,
+          requestedAt: Date.now()
+        });
+      }
 
       conn.send({
-        type: 'JOIN_ACCEPTED',
-        seatIndex: seatIdx,
-        roomCode,
-        state: gameState
+        type: 'JOIN_PENDING_APPROVAL',
+        message: '牌局已開始，已送出加入申請，正在等待台主（房主）授權...'
       });
-      renderWaitingSeats();
-      broadcastLobbyState();
-      voiceChat.dialAllHumanPeers(true);
-      if (data.micEnabled) {
-        voiceChat.requestMissingStreams();
-      }
-
-      if (gameState.phase !== 'LOBBY') {
-        if (wasTakeover) {
-          showActionBanner(`🟢 ${finalName} 已重新連線回歸！`);
-        }
-        broadcastGameState();
-        renderGameTable();
-      }
+      audioEngine.playActionChime('action');
+      renderHostApprovalUI(true);
+      return;
     } else if (data.type === 'PLAYER_LEAVE') {
       const seatIdx = typeof data.seatIndex === 'number'
         ? data.seatIndex
@@ -1796,13 +2044,17 @@
       }
       return;
     }
+    if (data.type === 'JOIN_PENDING_APPROVAL') {
+      document.getElementById('lobby-status-msg').textContent = `⏳ ${data.message || '牌局進行中，等待台主授權加入...'}`;
+      return;
+    }
     if (data.type === 'JOIN_REJECTED') {
-      isJoining = false;
-      document.getElementById('lobby-status-msg').textContent = data.reason || '無法加入房間';
+      resetJoinLobbyUI(`❌ ${data.reason || '無法加入房間'}`);
       return;
     }
     if (data.type === 'JOIN_ACCEPTED') {
       isJoining = false;
+      document.getElementById('cancel-join-btn').classList.add('hidden');
       mySeatIndex = data.seatIndex;
       roomCode = data.roomCode;
       Object.assign(gameState, data.state);
@@ -1853,7 +2105,7 @@
   }
 
   /* ==========================================================================
-     8. 洗牌、發牌動畫與開局補花流程
+     9. 洗牌、發牌動畫與開局補花流程
      ========================================================================== */
   document.getElementById('start-game-btn').addEventListener('click', () => {
     voiceChat.unlockAllRemoteAudio();
@@ -1946,7 +2198,7 @@
   }
 
   /* ==========================================================================
-     9. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
+     10. 房主核心回合推進、摸牌補花、吃碰槓胡與 AI 決策
      ========================================================================== */
   function showActionBanner(text) {
     const box = document.getElementById('action-banner-fx');
@@ -2275,7 +2527,7 @@
   }
 
   /* ==========================================================================
-     10. 牌桌畫面渲染（相對於 mySeatIndex 的視角 + 麥克風狀態 + 真人離線\AI代打標示）
+     11. 牌桌畫面渲染（相對於 mySeatIndex 的視角 + 麥克風狀態 + 真人離線\AI代打標示）
      ========================================================================== */
   function renderGameTable() {
     const ruleTagMap = { tw16: '🇹🇼 台灣16張', jp13: '🇯🇵 日本立直', hk13: '🇭🇰 廣東13張' };
@@ -2487,7 +2739,7 @@
   });
 
   /* ==========================================================================
-     11. 倒數計時器、防卡死看門狗與催牌機制
+     12. 倒數計時器、防卡死看門狗與催牌機制
      ========================================================================== */
   setInterval(() => {
     if (gameState.phase !== 'PLAYING' && gameState.phase !== 'CLAIM') return;
@@ -2537,7 +2789,7 @@
   });
 
   /* ==========================================================================
-     12. 介面按鈕事件（麥克風與喇叭雙向大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
+     13. 介面按鈕事件（麥克風與喇叭雙向大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
      ========================================================================== */
   document.getElementById('lobby-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
   document.getElementById('game-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
@@ -2607,6 +2859,9 @@
     if (isHost) {
       Object.values(guestConns).forEach(c => {
         if (c && c.open) c.send({ type: 'HOST_CLOSED' });
+      });
+      pendingJoinQueue.forEach(req => {
+        if (req.conn && req.conn.open) req.conn.send({ type: 'HOST_CLOSED' });
       });
     } else if (hostConn && hostConn.open) {
       hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId });
