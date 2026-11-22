@@ -155,7 +155,7 @@
 </head>
 <body class="flex flex-col">
 
-  <!-- 遠端真人語音音訊播放區（保持在 DOM 可見層級外但不設 display:none 以防部分瀏覽器阻擋播放） -->
+  <!-- 遠端真人語音音訊牽引播放區（由 Web Audio GainNode 接管最高 300% 放大輸出） -->
   <div id="remote-voice-container" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"></div>
 
   <!-- ==================== 1. 大廳與等待室畫面 ==================== -->
@@ -182,7 +182,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 真人麥克風語音對談（可調大小聲） · 真人離線\AI代打 · 語音報牌
+          台灣16張 · 日本立直 · 廣東13張 ｜ 語音對談（麥克風與喇叭雙向 300% 增益放大） · 真人離線\AI代打
         </p>
       </div>
 
@@ -286,10 +286,15 @@
                 <button id="lobby-speaker-unlock-btn" class="px-2 py-1 rounded-lg bg-sky-900/80 hover:bg-sky-800 border border-sky-500/40 text-[11px] font-bold text-sky-200" title="若電腦端聽不到手機聲音，請點此解鎖收聽">
                   🔊 收聽就緒
                 </button>
-                <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-700 rounded-lg px-2 py-1">
+                <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-700 rounded-lg px-2 py-1" title="調整己方麥克風收音大小聲">
                   <span class="text-[10px] text-emerald-300 font-bold">🎙️</span>
-                  <input id="lobby-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-14 sm:w-20 accent-emerald-400" title="調整麥克風收音大小聲" />
+                  <input id="lobby-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-12 sm:w-16 accent-emerald-400" />
                   <span id="lobby-mic-vol-label" class="text-[10px] font-mono text-emerald-200 w-7 text-right">100%</span>
+                </div>
+                <div class="flex items-center gap-1 bg-slate-900/90 border border-sky-700/60 rounded-lg px-2 py-1" title="放大對手語音喇叭音量（最高300%）">
+                  <span class="text-[10px] text-sky-300 font-bold">🔊</span>
+                  <input id="lobby-spk-vol-slider" type="range" min="50" max="300" value="180" class="w-12 sm:w-16 accent-sky-400" />
+                  <span id="lobby-spk-vol-label" class="text-[10px] font-mono text-sky-200 w-7 text-right">180%</span>
                 </div>
               </div>
             </div>
@@ -310,7 +315,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：真人開啟麥克風即可與線上牌友直接對談（開麥者打牌不觸發系統報牌，AI 依舊報牌）；若電腦聽不到手機語音請點擊「🔊 收聽」解鎖瀏覽器音訊。
+      提示：若電腦收聽手機語音偏小，可直接拉高頂部「🔊 喇叭增益滑桿（最高 300%）」；開麥者打牌不觸發系統報牌，AI 依舊報牌。
     </div>
   </div>
 
@@ -323,16 +328,19 @@
         <span id="table-room-tag" class="hidden sm:inline-block px-2 py-1 rounded bg-slate-950/60 border border-slate-700 text-[11px] font-mono text-slate-300">房號: -----</span>
       </div>
       <div class="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
-        <!-- 麥克風開關、收聽解鎖與快捷大小聲滑桿 -->
+        <!-- 麥克風與喇叭增益雙向控制條 -->
         <div class="flex items-center gap-1 bg-slate-950/85 border border-slate-700 rounded px-1.5 py-0.5">
           <button id="game-mic-btn" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] sm:text-xs text-slate-200 font-bold">
             🎙️ 開麥
           </button>
-          <button id="game-speaker-unlock-btn" class="px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-[11px] sm:text-xs text-sky-200 font-bold" title="點此確保電腦喇叭接收手機語音">
-            🔊 收聽
-          </button>
-          <input id="game-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-12 sm:w-16 accent-emerald-400" title="調整麥克風音量大小" />
+          <input id="game-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-10 sm:w-14 accent-emerald-400" title="調整己方麥克風發話音量" />
           <span id="game-mic-vol-label" class="text-[10px] font-mono text-emerald-300 w-7 text-right">100%</span>
+          <span class="text-slate-600">|</span>
+          <button id="game-speaker-unlock-btn" class="px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-[11px] sm:text-xs text-sky-200 font-bold" title="點此確保電腦喇叭接收手機語音">
+            🔊 喇叭
+          </button>
+          <input id="game-spk-vol-slider" type="range" min="50" max="300" value="180" class="w-12 sm:w-16 accent-sky-400" title="放大遠端玩家語音喇叭音量（最高300%）" />
+          <span id="game-spk-vol-label" class="text-[10px] font-mono text-sky-300 w-7 text-right">180%</span>
         </div>
         <button id="game-fullscreen-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-emerald-200 font-bold">⛶ 全螢幕</button>
         <button id="quick-voice-btn" class="px-2 py-1 rounded bg-slate-950/75 hover:bg-slate-800 border border-slate-700 text-[11px] sm:text-xs text-sky-200 font-bold">🗣️ 報牌開</button>
@@ -489,14 +497,20 @@
         </div>
         <div class="space-y-2 pt-2 border-t border-slate-800">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-emerald-300">4. 真人線上語音麥克風音量 (<span id="settings-mic-vol-label">100</span>%)</span>
-            <span class="text-[11px] text-slate-400">0% 靜音 ～ 200% 增益放大</span>
+            <span class="font-bold text-emerald-300">4. 己方發話麥克風音量 (<span id="settings-mic-vol-label">100</span>%)</span>
+            <span class="text-[11px] text-slate-400">0% ～ 200%</span>
           </div>
           <input id="settings-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-full accent-emerald-400" />
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="font-bold text-sky-300">5. 遠端語音喇叭增益放大 (<span id="settings-spk-vol-label">180</span>%)</span>
+            <span class="text-[11px] text-slate-400">解決電腦聲音小（最高 300%）</span>
+          </div>
+          <input id="settings-spk-vol-slider" type="range" min="50" max="300" value="180" class="w-full accent-sky-400" />
         </div>
         <div class="space-y-2 pt-2 border-t border-slate-800">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-amber-200">5. 背景音樂（內建古箏五聲音階）</span>
+            <span class="font-bold text-amber-200">6. 背景音樂（內建古箏五聲音階）</span>
             <input id="bgm-toggle" type="checkbox" class="w-4 h-4 accent-amber-400" />
           </div>
           <div>
@@ -647,7 +661,7 @@
 
   /* ==========================================================================
      2. 真人玩家 WebRTC 線上麥克風語音對談引擎
-        （解決電腦喇叭聽不到手機端聲音：雙向音訊解鎖 + WebAudio 備援 + 自動重撥請求）
+        （含遠端喇叭 50%~300% WebAudio 動態壓縮增益放大，解決電腦音量只有 40% 問題）
      ========================================================================== */
   class VoiceChatEngine {
     constructor() {
@@ -656,11 +670,16 @@
       this.micAudioCtx = null;
       this.micGainNode = null;
       this.micGainValue = 1.0;
+
+      // 遠端接收端喇叭增益放大管線（解決電腦通話壓低音量導致只有40%的問題）
+      this.playbackCtx = null;
+      this.speakerGainValue = 1.8; // 預設 180% 放大，最高 300%
+      this.remoteNodes = {};       // remotePeerId -> { source, compressor, gainNode }
+
       this.isMicOn = false;
       this.mediaCalls = {};    // remotePeerId -> MediaConnection
       this.audioEls = {};      // remotePeerId -> HTMLAudioElement
       this.remoteStreams = {}; // remotePeerId -> MediaStream
-      this.playbackCtx = null; // 桌機端雙重音訊輸出備援
       this.playbackBlocked = false;
     }
 
@@ -674,13 +693,41 @@
       }
     }
 
-    // 解鎖桌機/手機瀏覽器自動播放限制，確保電腦喇叭能直接播放手機傳來的語音
+    setSpeakerVolumePercent(percent) {
+      const clamped = Math.max(50, Math.min(300, Number(percent) || 100));
+      this.speakerGainValue = clamped / 100;
+
+      // 即時更新所有已連線手機端語音的喇叭放大倍率
+      Object.values(this.remoteNodes).forEach(nodePack => {
+        if (nodePack && nodePack.gainNode && this.playbackCtx) {
+          try {
+            nodePack.gainNode.gain.setValueAtTime(this.speakerGainValue, this.playbackCtx.currentTime);
+          } catch (e) {
+            nodePack.gainNode.gain.value = this.speakerGainValue;
+          }
+        }
+      });
+
+      const sliders = ['lobby-spk-vol-slider', 'game-spk-vol-slider', 'settings-spk-vol-slider'];
+      const labels = ['lobby-spk-vol-label', 'game-spk-vol-label', 'settings-spk-vol-label'];
+      sliders.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && Number(el.value) !== clamped) el.value = clamped;
+      });
+      labels.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = `${clamped}%`;
+      });
+    }
+
     unlockAllRemoteAudio() {
       this.ensurePlaybackCtx();
       let anyBlocked = false;
       Object.entries(this.audioEls).forEach(([pid, audioEl]) => {
         if (!audioEl) return;
-        audioEl.muted = false;
+        const hasWebAudioBoost = !!this.remoteNodes[pid];
+        // 若已由 WebAudio GainNode 放大輸出，HTMLAudio 設為靜音僅維持串流活躍，避免雙重回音；若無則直接播
+        audioEl.muted = hasWebAudioBoost;
         audioEl.volume = 1.0;
         const p = audioEl.play();
         if (p && typeof p.catch === 'function') {
@@ -695,7 +742,6 @@
         this.playbackBlocked = false;
         this.updateSpeakerButtonsUI();
       }
-      // 檢查是否有已開麥的真人玩家但本機尚未收到其音訊流，主動請求對方重撥
       this.requestMissingStreams();
     }
 
@@ -864,7 +910,6 @@
       const remotePid = call.peer;
       const outboundStream = this.processedStream || this.rawStream;
       try {
-        // 即使本機未開麥，明確回傳空參數並立即綁定監聽 stream，確保電腦端完整接收手機端音軌
         if (this.isMicOn && outboundStream) {
           call.answer(outboundStream);
         } else {
@@ -893,6 +938,7 @@
     }
 
     attachRemoteAudio(remotePid, stream) {
+      this.ensurePlaybackCtx();
       const container = document.getElementById('remote-voice-container');
       let audioEl = this.audioEls[remotePid];
       if (!audioEl) {
@@ -903,9 +949,39 @@
         container.appendChild(audioEl);
         this.audioEls[remotePid] = audioEl;
       }
-      audioEl.muted = false;
-      audioEl.volume = 1.0;
       audioEl.srcObject = stream;
+
+      // 建立 Web Audio 動態壓縮 + 最高 300% 喇叭增益管線（解決電腦音量只有 40% 的問題）
+      let webAudioReady = false;
+      if (this.playbackCtx) {
+        try {
+          if (this.remoteNodes[remotePid]) {
+            try { this.remoteNodes[remotePid].source.disconnect(); } catch (e) {}
+          }
+          const source = this.playbackCtx.createMediaStreamSource(stream);
+          const compressor = this.playbackCtx.createDynamicsCompressor();
+          compressor.threshold.value = -28;
+          compressor.knee.value = 24;
+          compressor.ratio.value = 6;
+          compressor.attack.value = 0.005;
+          compressor.release.value = 0.2;
+
+          const gainNode = this.playbackCtx.createGain();
+          gainNode.gain.value = this.speakerGainValue; // 預設 180%，最高可調至 300%
+
+          source.connect(compressor);
+          compressor.connect(gainNode);
+          gainNode.connect(this.playbackCtx.destination);
+          this.remoteNodes[remotePid] = { source, compressor, gainNode };
+          webAudioReady = true;
+        } catch (e) {
+          webAudioReady = false;
+        }
+      }
+
+      // 在 Chrome 中必須啟動 audioEl.play() 以驅動 WebRTC 音軌解碼；若已接上 WebAudio 增益則靜音原標籤避免重複疊音
+      audioEl.muted = webAudioReady;
+      audioEl.volume = 1.0;
 
       const playPromise = audioEl.play();
       if (playPromise && typeof playPromise.then === 'function') {
@@ -913,7 +989,6 @@
           this.playbackBlocked = false;
           this.updateSpeakerButtonsUI();
         }).catch(() => {
-          // 若桌機瀏覽器因尚未互動而阻擋自動播放，標記提示並嘗試 WebAudio 輸出
           this.playbackBlocked = true;
           this.updateSpeakerButtonsUI();
         });
@@ -921,6 +996,14 @@
     }
 
     removeRemoteAudio(remotePid) {
+      if (this.remoteNodes[remotePid]) {
+        try {
+          this.remoteNodes[remotePid].source.disconnect();
+          this.remoteNodes[remotePid].compressor.disconnect();
+          this.remoteNodes[remotePid].gainNode.disconnect();
+        } catch (e) {}
+        delete this.remoteNodes[remotePid];
+      }
       if (this.audioEls[remotePid]) {
         try {
           this.audioEls[remotePid].srcObject = null;
@@ -949,7 +1032,7 @@
           lobbySpk.className = 'px-2 py-1 rounded-lg bg-sky-900/80 hover:bg-sky-800 border border-sky-500/40 text-[11px] font-bold text-sky-200';
         }
         if (gameSpk) {
-          gameSpk.textContent = '🔊 收聽';
+          gameSpk.textContent = '🔊 喇叭';
           gameSpk.className = 'px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-[11px] sm:text-xs text-sky-200 font-bold';
         }
       }
@@ -981,7 +1064,6 @@
   }
   const voiceChat = new VoiceChatEngine();
 
-  // 任何使用者點擊頁面操作時，自動解鎖遠端語音播放權限（解決電腦端未開麥時瀏覽器阻擋喇叭出聲的問題）
   ['pointerdown', 'keydown'].forEach(evtName => {
     window.addEventListener(evtName, () => {
       voiceChat.unlockAllRemoteAudio();
@@ -1609,7 +1691,6 @@
     }
 
     if (data.type === 'VOICE_RELAY_REQUEST') {
-      // 某訪客請求另一位真人玩家重傳語音串流
       if (data.targetPeerId === myPeerId) {
         voiceChat.dialSinglePeer(data.fromPeerId, true);
       } else if (guestConns[data.targetPeerId] && guestConns[data.targetPeerId].open) {
@@ -1680,6 +1761,9 @@
       renderWaitingSeats();
       broadcastLobbyState();
       voiceChat.dialAllHumanPeers(true);
+      if (data.micEnabled) {
+        voiceChat.requestMissingStreams();
+      }
 
       if (gameState.phase !== 'LOBBY') {
         if (wasTakeover) {
@@ -2453,7 +2537,7 @@
   });
 
   /* ==========================================================================
-     12. 介面按鈕事件（麥克風開關、收聽解鎖、大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
+     12. 介面按鈕事件（麥克風與喇叭雙向大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
      ========================================================================== */
   document.getElementById('lobby-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
   document.getElementById('game-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
@@ -2472,6 +2556,15 @@
     if (slider) {
       slider.addEventListener('input', (e) => {
         voiceChat.setMicVolumePercent(e.target.value);
+      });
+    }
+  });
+
+  ['lobby-spk-vol-slider', 'game-spk-vol-slider', 'settings-spk-vol-slider'].forEach(sliderId => {
+    const slider = document.getElementById(sliderId);
+    if (slider) {
+      slider.addEventListener('input', (e) => {
+        voiceChat.setSpeakerVolumePercent(e.target.value);
       });
     }
   });
