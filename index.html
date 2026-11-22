@@ -323,7 +323,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：若台主離線，系統將依加入先後順序自動交由下一位真人接手成為新台主，直到房內無任何真人才關閉該房號。
+      提示：若台主離線，系統將依加入先後順序自動交由下一位真人接手成為新台主並延續原房號，原台主隨時可憑原房號重連回歸。
     </div>
   </div>
 
@@ -1533,7 +1533,8 @@
   }
 
   /* ==========================================================================
-     7. 台主（房主）離線交接引擎（Host Migration）：依序由加入順序最前的真人接手
+     7. 台主（房主）離線交接引擎（Host Migration）：
+        第二順位真人直接繼承「MJROOM-${roomCode}」主房號 ID，確保原台主隨時可憑原房號回歸！
      ========================================================================== */
   function getSortedHumanCandidates(excludeSeatIdx = -1) {
     return gameState.players
@@ -1549,7 +1550,7 @@
     const oldHost = gameState.players[departedHostSeatIdx];
     const oldHostName = oldHost ? (oldHost.originalName || oldHost.name.replace(/\s*\(真人離線\\AI代打\)/g, '')) : '原台主';
 
-    // 將離線的舊台主座位轉為「真人離線\AI代打」
+    // 將離線的舊台主座位轉為「真人離線\AI代打」，保留 originalName 供原台主憑原房號回歸時優先配回原位
     if (oldHost && !oldHost.isAI) {
       if (oldHost.peerId) voiceChat.removeRemoteAudio(oldHost.peerId);
       oldHost.originalName = oldHostName;
@@ -1565,7 +1566,6 @@
     // 依照 joinOrder 找出加入順序最前面的真人玩家接手台主
     const candidates = getSortedHumanCandidates(-1);
     if (candidates.length === 0) {
-      // 房內已無任何真人玩家，關閉該房號
       alert('牌桌內已無任何真人玩家，即將關閉房間並返回大廳。');
       location.reload();
       return;
@@ -1573,19 +1573,18 @@
 
     const successor = candidates[0];
     const newHostSeatIdx = successor.idx;
-    const newHostPeerId = `MJROOM-${roomCode}-H${newHostSeatIdx}`;
+    // ★ 關鍵修正：新台主直接繼承原始房間主 ID（MJROOM-${roomCode}），讓原台主憑原本房號即可找回房間！
+    const canonicalRoomPeerId = `MJROOM-${roomCode}`;
     gameState.hostSeatIndex = newHostSeatIdx;
 
     if (newHostSeatIdx === mySeatIndex) {
-      // ★ 本機就是加入順序第一的真人玩家，正式接手成為新台主（房主）！
-      promoteSelfToNewHost(newHostPeerId, oldHostName);
+      promoteSelfToNewHost(canonicalRoomPeerId, oldHostName, 0);
     } else {
-      // ★ 本機是其他順位真人玩家，自動將 DataConnection 重連至新台主
-      reconnectGuestToNewHost(newHostPeerId, successor.p.name);
+      reconnectGuestToNewHost(canonicalRoomPeerId, successor.p.name, 0);
     }
   }
 
-  function promoteSelfToNewHost(newHostPeerId, oldHostName) {
+  function promoteSelfToNewHost(canonicalRoomPeerId, oldHostName, retryCount = 0) {
     isHost = true;
     hostConn = null;
     guestConns = {};
@@ -1593,7 +1592,6 @@
     guestLastSeen = {};
 
     const myPlayer = gameState.players[mySeatIndex];
-    const oldMyPeerId = myPeerId;
 
     // 暫時清空其他真人的 peerId，等待他們自動向新台主重綁連線
     gameState.players.forEach((p, idx) => {
@@ -1607,17 +1605,18 @@
       try { peer.destroy(); } catch (e) {}
     }
 
-    peer = new Peer(newHostPeerId);
-    peer.on('open', (id) => {
+    const newPeer = new Peer(canonicalRoomPeerId);
+    peer = newPeer;
+
+    newPeer.on('open', (id) => {
       myPeerId = id;
       myPlayer.peerId = id;
       isMigratingHost = false;
 
-      // 重新計算最大 joinOrder 序號
       const maxOrder = gameState.players.reduce((m, p) => (!p.isAI && p.joinOrder < 900 ? Math.max(m, p.joinOrder) : m), 1);
       nextJoinOrderSeq = maxOrder + 1;
 
-      const takeoverMsg = `👑 原台主離線，由您接手新台主！（${oldHostName} ${OFFLINE_AI_LABEL}）`;
+      const takeoverMsg = `👑 原台主離線，由您接手新台主（房號 ${roomCode} 已延續）！`;
       showActionBanner('👑 您已接手成為新台主！');
       audioEngine.playActionChime('action');
       audioEngine.speak('原台主離線，由您接手新台主');
@@ -1632,11 +1631,11 @@
       }
     });
 
-    peer.on('call', (call) => {
+    newPeer.on('call', (call) => {
       voiceChat.handleIncomingCall(call);
     });
 
-    peer.on('connection', (conn) => {
+    newPeer.on('connection', (conn) => {
       conn.on('data', (data) => handleHostReceiveData(conn, data));
       conn.on('close', () => {
         const qIdx = pendingJoinQueue.findIndex(item => item.conn === conn || item.peerId === conn.peer);
@@ -1658,12 +1657,20 @@
       });
     });
 
-    peer.on('error', () => {
+    newPeer.on('error', (err) => {
+      // 若原台主是異常斷網而非主動關閉分頁，PeerJS 伺服器可能需 1~3 秒才釋放 MJROOM-${roomCode}，自動重試搶佔主房號
+      if (err && err.type === 'unavailable-id' && retryCount < 6) {
+        try { newPeer.destroy(); } catch (e) {}
+        setTimeout(() => {
+          promoteSelfToNewHost(canonicalRoomPeerId, oldHostName, retryCount + 1);
+        }, 1200);
+        return;
+      }
       isMigratingHost = false;
     });
   }
 
-  function reconnectGuestToNewHost(newHostPeerId, newHostName) {
+  function reconnectGuestToNewHost(canonicalRoomPeerId, newHostName, retryCount = 0) {
     if (gameState.phase !== 'LOBBY') {
       document.getElementById('turn-status-banner').textContent = `🔄 原台主離線，正在自動連線至新台主「${newHostName}」...`;
     } else {
@@ -1672,28 +1679,40 @@
 
     setTimeout(() => {
       try {
-        if (!peer || peer.disconnected) {
+        if (!peer || peer.disconnected || peer.destroyed) {
           peer = new Peer();
           peer.on('open', (id) => {
             myPeerId = id;
-            dialNewHostDataConn(newHostPeerId, newHostName);
+            dialNewHostDataConn(canonicalRoomPeerId, newHostName, retryCount);
           });
           peer.on('call', (call) => voiceChat.handleIncomingCall(call));
         } else {
-          dialNewHostDataConn(newHostPeerId, newHostName);
+          dialNewHostDataConn(canonicalRoomPeerId, newHostName, retryCount);
         }
       } catch (e) {
         isMigratingHost = false;
       }
-    }, 900);
+    }, 1100);
   }
 
-  function dialNewHostDataConn(newHostPeerId, newHostName) {
-    hostConn = peer.connect(newHostPeerId, { reliable: true });
-    hostConn.on('open', () => {
+  function dialNewHostDataConn(canonicalRoomPeerId, newHostName, retryCount = 0) {
+    let opened = false;
+    const conn = peer.connect(canonicalRoomPeerId, { reliable: true });
+    hostConn = conn;
+
+    const retryTimer = setTimeout(() => {
+      if (!opened && retryCount < 6) {
+        try { conn.close(); } catch (e) {}
+        reconnectGuestToNewHost(canonicalRoomPeerId, newHostName, retryCount + 1);
+      }
+    }, 2500);
+
+    conn.on('open', () => {
+      opened = true;
+      clearTimeout(retryTimer);
       isHost = false;
       isMigratingHost = false;
-      hostConn.send({
+      conn.send({
         type: 'REBIND_GUEST',
         seatIndex: mySeatIndex,
         peerId: myPeerId,
@@ -1702,10 +1721,11 @@
       });
       showActionBanner(`👑 已交接新台主：${newHostName}`);
     });
-    hostConn.on('data', (data) => handleGuestReceiveData(data));
-    hostConn.on('close', () => {
-      if (!isMigratingHost) {
-        // 若新台主之後也離線，再度依加入順序往下交接給下一位真人！
+
+    conn.on('data', (data) => handleGuestReceiveData(data));
+    conn.on('close', () => {
+      clearTimeout(retryTimer);
+      if (opened && !isMigratingHost) {
         initiateHostMigration(gameState.hostSeatIndex);
       }
     });
@@ -1776,7 +1796,7 @@
             const label = p.offlineTakeover
               ? `座位 ${idx + 1}（${WIND_NAMES[p.wind]} · ${p.originalName} ${OFFLINE_AI_LABEL}）`
               : `座位 ${idx + 1}（${WIND_NAMES[p.wind]} · ${p.name}）`;
-            return `<option value="${idx}">${label}</option>`;
+            return `<option value="${idx}" ${p.offlineTakeover && p.originalName === req.name ? 'selected' : ''}>${label}</option>`;
           }).join('')
         : `<option value="-1">目前無可用 AI 空位（4 位真人已滿）</option>`;
 
@@ -1954,12 +1974,15 @@
 
   function notifyPeersBeforeUnload() {
     if (isHost) {
-      // 台主關閉分頁時，主動通知所有訪客立即啟動台主交接
+      // 台主關閉分頁時，主動通知所有訪客立即啟動台主交接，並主動銷毀 peer 立即釋放 MJROOM-${roomCode} 給接任者
       Object.values(guestConns).forEach(c => {
         if (c && c.open) {
           try { c.send({ type: 'HOST_MIGRATE_LEAVE', departedSeat: mySeatIndex }); } catch (e) {}
         }
       });
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
     } else if (hostConn && hostConn.open) {
       try {
         hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId });
@@ -2198,18 +2221,27 @@
       peer = new Peer();
       peer.on('open', (id) => {
         myPeerId = id;
+        let connOpened = false;
+        const connectTimeout = setTimeout(() => {
+          if (!connOpened && isJoining) {
+            resetJoinLobbyUI('連線逾時或找不到此房間，請確認台主仍在線後重試。');
+          }
+        }, 12000);
+
         hostConn = peer.connect('MJROOM-' + code, { reliable: true });
         hostConn.on('open', () => {
+          connOpened = true;
+          clearTimeout(connectTimeout);
           isHost = false;
           roomCode = code;
           hostConn.send({ type: 'JOIN_REQUEST', name: myName, peerId: myPeerId, micEnabled: voiceChat.isMicOn });
         });
         hostConn.on('data', (data) => handleGuestReceiveData(data));
         hostConn.on('close', () => {
+          clearTimeout(connectTimeout);
           if (gameState.phase === 'LOBBY' && document.getElementById('waiting-room-panel').classList.contains('hidden')) {
             resetJoinLobbyUI('連線已關閉或未獲授權。');
           } else if (!isMigratingHost) {
-            // ★ 原台主離線斷線，觸發「依加入順序交接新台主」流程，不解散牌桌！
             initiateHostMigration(gameState.hostSeatIndex);
           }
         });
@@ -2217,8 +2249,12 @@
       peer.on('call', (call) => {
         voiceChat.handleIncomingCall(call);
       });
-      peer.on('error', () => {
-        resetJoinLobbyUI('找不到此房間或網路受限，請確認房號後重試。');
+      peer.on('error', (err) => {
+        if (err && err.type === 'peer-unavailable') {
+          resetJoinLobbyUI(`無此房間號碼（${code}），或原房間已無任何真人玩家關閉。`);
+        } else {
+          resetJoinLobbyUI('找不到此房間或網路受限，請確認房號後重試。');
+        }
       });
     } catch (e) {
       resetJoinLobbyUI('目前瀏覽器環境不支援外部連線。');
@@ -2236,7 +2272,6 @@
     }
 
     if (data.type === 'REBIND_GUEST') {
-      // 台主交接後，其他在線真人重新綁定至新台主
       const sIdx = data.seatIndex;
       const pid = data.peerId || conn.peer;
       if (typeof sIdx === 'number' && gameState.players[sIdx] && !gameState.players[sIdx].isAI) {
@@ -2386,7 +2421,6 @@
   function handleGuestReceiveData(data) {
     if (!data || !data.type) return;
     if (data.type === 'HOST_MIGRATE_LEAVE') {
-      // 台主主動按離開，立即啟動順位交接
       initiateHostMigration(typeof data.departedSeat === 'number' ? data.departedSeat : gameState.hostSeatIndex);
       return;
     }
@@ -3218,7 +3252,6 @@
     wakeLockManager.disable();
     voiceChat.stopMic();
     if (isHost) {
-      // 台主離開時，通知所有訪客立即依加入順序交接新台主；唯有完全沒有其他真人時才結束房間
       const otherHumans = getSortedHumanCandidates(mySeatIndex);
       if (otherHumans.length > 0) {
         Object.values(guestConns).forEach(c => {
@@ -3238,10 +3271,14 @@
           try { req.conn.send({ type: 'HOST_CLOSED' }); } catch (e) {}
         }
       });
+      // 主動銷毀主房號 Peer 連線，立即釋放 MJROOM-${roomCode} 讓第二順位接手者無縫註冊
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+      }
     } else if (hostConn && hostConn.open) {
       try { hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId }); } catch (e) {}
     }
-    setTimeout(() => location.reload(), 150);
+    setTimeout(() => location.reload(), 180);
   }
   document.getElementById('leave-room-btn').addEventListener('click', leaveCurrentRoom);
   document.getElementById('game-exit-btn').addEventListener('click', leaveCurrentRoom);
