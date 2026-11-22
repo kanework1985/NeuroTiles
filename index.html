@@ -179,7 +179,7 @@
       <div class="text-center mb-3 lobby-header">
         <h1 class="text-2xl sm:text-4xl font-black text-amber-300 tracking-wider drop-shadow">雀神四人麻將</h1>
         <p class="text-xs sm:text-sm text-emerald-200/80 mt-1 lobby-subtitle">
-          台灣16張 · 日本立直 · 廣東13張 ｜ 斷線／離桌 AI 自動接手 ｜ 語音報牌 · 自訂音樂 · 雙牌面
+          台灣16張 · 日本立直 · 廣東13張 ｜ 真人離線\AI代打 自動接管 ｜ 語音報牌 · 自訂音樂 · 雙牌面
         </p>
       </div>
 
@@ -294,7 +294,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：對戰途中若有真人玩家離開或斷線，系統將自動由 AI 電腦接手代打，牌局不中斷。
+      提示：對戰途中若有真人玩家離開或斷線，系統將立即顯示「真人離線\AI代打」並自動介入接手，牌局不中斷。
     </div>
   </div>
 
@@ -329,7 +329,7 @@
       <!-- 上家（左側） -->
       <div class="flex items-center gap-1 sm:gap-2 h-full shrink-0 z-10">
         <div class="flex flex-col items-center justify-center gap-1">
-          <div id="info-left" class="flex flex-col items-center px-1.5 py-1 rounded-lg bg-slate-950/75 border border-slate-700/80 text-[10px] sm:text-xs text-center max-w-[78px]"></div>
+          <div id="info-left" class="flex flex-col items-center px-1.5 py-1 rounded-lg bg-slate-950/75 border border-slate-700/80 text-[10px] sm:text-xs text-center max-w-[88px]"></div>
           <div id="hand-left" class="flex flex-col gap-0.5"></div>
           <div id="melds-left" class="flex flex-col gap-1 mt-1"></div>
         </div>
@@ -369,7 +369,7 @@
       <!-- 下家（右側） -->
       <div class="flex items-center gap-1 sm:gap-2 h-full shrink-0 z-10">
         <div class="flex flex-col items-center justify-center gap-1">
-          <div id="info-right" class="flex flex-col items-center px-1.5 py-1 rounded-lg bg-slate-950/75 border border-slate-700/80 text-[10px] sm:text-xs text-center max-w-[78px]"></div>
+          <div id="info-right" class="flex flex-col items-center px-1.5 py-1 rounded-lg bg-slate-950/75 border border-slate-700/80 text-[10px] sm:text-xs text-center max-w-[88px]"></div>
           <div id="hand-right" class="flex flex-col gap-0.5"></div>
           <div id="melds-right" class="flex flex-col gap-1 mt-1"></div>
         </div>
@@ -394,7 +394,7 @@
         <div id="melds-bottom" class="flex items-center gap-1.5"></div>
       </div>
 
-      <!-- 自家手牌列（手機自動允許換行或橫向自適應） -->
+      <!-- 自家手牌列 -->
       <div id="hand-bottom" class="w-full max-w-5xl flex flex-wrap items-end justify-center gap-0.5 sm:gap-1 px-1 min-h-[54px] sm:min-h-[80px]"></div>
     </div>
 
@@ -404,9 +404,9 @@
       <div id="shuffle-stage-text" class="mt-4 text-lg sm:text-2xl font-black text-amber-300 tracking-wider">正在洗牌...</div>
     </div>
 
-    <!-- ==================== 動作特效提示（吃／碰／槓／補花／胡牌） ==================== -->
-    <div id="action-banner-fx" class="hidden pointer-events-none absolute inset-0 z-40 flex items-center justify-center">
-      <div id="action-banner-text" class="px-7 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-black text-3xl sm:text-5xl shadow-2xl border-2 border-white">
+    <!-- ==================== 動作特效提示（吃／碰／槓／補花／胡牌／離線代打） ==================== -->
+    <div id="action-banner-fx" class="hidden pointer-events-none absolute inset-0 z-40 flex items-center justify-center px-4">
+      <div id="action-banner-text" class="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 text-slate-950 font-black text-2xl sm:text-4xl shadow-2xl border-2 border-white text-center">
         補花！
       </div>
     </div>
@@ -833,11 +833,9 @@
     const hand = player.hand;
     if (!hand.length) return null;
     if (personality === 'sniper') {
-      // 放槍王：優先打中張與別人剛打過的危險牌
       const middle = hand.filter(t => ['4','5','6'].includes(t[0]));
       if (middle.length) return middle[Math.floor(Math.random() * middle.length)];
     }
-    // 計算每張牌孤立程度
     const counts = {};
     hand.forEach(t => counts[t] = (counts[t] || 0) + 1);
     let bestTile = hand[hand.length - 1];
@@ -854,10 +852,9 @@
         if (counts[`${num + 2}${suit}`]) score += 2;
         if (num === 1 || num === 9) score -= 1;
       } else {
-        score -= 2; // 孤立字牌優先打出
+        score -= 2;
       }
       if (personality === 'god') {
-        // 麻將神額外避開其他家牌河未出現的生張中洞牌
         if (!isNaN(num) && num >= 3 && num <= 7) score += 1;
       }
       if (score < lowestScore) {
@@ -869,22 +866,23 @@
   }
 
   /* ==========================================================================
-     4. 全域遊戲狀態與多人 P2P 連線控制（含真人離線 AI 自動接管）
+     4. 全域遊戲狀態與多人 P2P 連線控制（含「真人離線\AI代打」完整狀態追蹤）
      ========================================================================== */
   const WINDS = ['E', 'S', 'W', 'N'];
   const WIND_NAMES = { E: '東風', S: '南風', W: '西風', N: '北風' };
   const AI_LABELS = { sniper: '🎁放槍王', standard: '🙂普通', god: '👑麻將神' };
+  const OFFLINE_AI_LABEL = '真人離線\\AI代打';
 
   let peer = null;
   let hostConn = null;
   let guestConns = {}; // peerId -> DataConnection
+  let guestLastSeen = {}; // seatIdx -> timestamp
   let isHost = false;
   let myPeerId = '';
   let mySeatIndex = 0;
   let roomCode = '';
   let tileStyle = 'realistic';
   let selectedHandIndex = -1;
-  let turnCountdownInterval = null;
   let hostActionTimeout = null;
   let claimWatchdogTimeout = null;
   let lastStateUpdatedAt = Date.now();
@@ -903,10 +901,10 @@
     claimResponses: {},
     turnDeadline: 0,
     players: [
-      { seat: 0, wind: 'E', name: '玩家1', peerId: 'HOST', isAI: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', peerId: null, isAI: true, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', peerId: null, isAI: true, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
-      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', peerId: null, isAI: true, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
+      { seat: 0, wind: 'E', name: '玩家1', originalName: '玩家1', peerId: 'HOST', isAI: false, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 1, wind: 'S', name: 'AI 電腦 (南)', originalName: 'AI 電腦 (南)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 2, wind: 'W', name: 'AI 電腦 (西)', originalName: 'AI 電腦 (西)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false },
+      { seat: 3, wind: 'N', name: 'AI 電腦 (北)', originalName: 'AI 電腦 (北)', peerId: null, isAI: true, offlineTakeover: false, aiPersonality: 'standard', score: 10000, hand: [], drawnTile: null, melds: [], river: [], flowers: [], riichi: false }
     ]
   };
 
@@ -932,23 +930,28 @@
   }
 
   /* ==========================================================================
-     5. 真人離線／退出由 AI 接管核心邏輯
+     5. 真人離線後由 AI 介入（並明確註明「真人離線\AI代打」）核心邏輯
      ========================================================================== */
-  function convertSeatToAI(seatIdx, reasonText = '已離開，由 AI 接手代打') {
+  function convertSeatToAI(seatIdx, reasonDetail = '斷線或離開') {
     if (!isHost) return;
     const p = gameState.players[seatIdx];
-    if (!p || p.isAI) return;
+    if (!p || (p.isAI && p.offlineTakeover)) return;
 
-    const oldName = p.name;
+    const baseName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
     if (p.peerId && guestConns[p.peerId]) {
       try { guestConns[p.peerId].close(); } catch (e) {}
       delete guestConns[p.peerId];
     }
+    delete guestLastSeen[seatIdx];
 
+    p.originalName = baseName;
     p.isAI = true;
+    p.offlineTakeover = true;
     p.peerId = null;
-    p.name = `${oldName} (🤖AI接管)`;
+    p.name = `${baseName} (${OFFLINE_AI_LABEL})`;
     if (!p.aiPersonality) p.aiPersonality = 'standard';
+
+    const noticeText = `${baseName} ${OFFLINE_AI_LABEL}`;
 
     if (gameState.phase === 'LOBBY') {
       renderWaitingSeats();
@@ -956,33 +959,66 @@
       return;
     }
 
-    // 牌局進行中：立即同步狀態並接管當前動作
-    if (gameState.phase === 'CLAIM' && gameState.pendingClaims[seatIdx]) {
-      delete gameState.pendingClaims[seatIdx];
-      delete gameState.claimResponses[seatIdx];
-      if (Object.keys(gameState.pendingClaims).length === 0) {
+    // 若該玩家正處於吃/碰/槓/胡決策階段，立即交由 AI 補齊回應或自動過牌
+    if (gameState.phase === 'CLAIM' && gameState.pendingClaims[seatIdx] && !gameState.claimResponses[seatIdx]) {
+      const opt = gameState.pendingClaims[seatIdx];
+      if (opt.canHu) {
+        gameState.claimResponses[seatIdx] = { type: 'HU' };
+      } else if (opt.canPong && Math.random() < 0.65) {
+        gameState.claimResponses[seatIdx] = { type: 'PONG' };
+      } else {
+        gameState.claimResponses[seatIdx] = { type: 'PASS' };
+      }
+
+      if (Object.keys(gameState.pendingClaims).every(k => !!gameState.claimResponses[k])) {
+        if (claimWatchdogTimeout) clearTimeout(claimWatchdogTimeout);
         resolveClaimPhase();
         return;
       }
     }
 
-    broadcastGameState();
+    showActionBanner(`🤖 ${noticeText}`);
+    audioEngine.speak('真人離線，AI代打');
+    broadcastGameState({ takeoverAlert: noticeText });
     renderGameTable();
-    document.getElementById('turn-status-banner').textContent = `🤖 ${oldName} ${reasonText}`;
+    document.getElementById('turn-status-banner').textContent = `🤖 ${noticeText}（${reasonDetail}）`;
 
+    // 若剛好輪到該座位出牌，立即排程 AI 接手出牌
     if (gameState.phase === 'PLAYING' && gameState.turnIndex === seatIdx) {
       scheduleHostAITurn();
     }
   }
 
-  // 當本機訪客關閉視窗或重新整理時，通知房主立即派 AI 接管
-  window.addEventListener('beforeunload', () => {
+  // 訪客端：關閉視窗、切出頁面或斷網時立即通報房主切換「真人離線\AI代打」
+  function notifyHostImLeaving() {
     if (!isHost && hostConn && hostConn.open) {
       try {
         hostConn.send({ type: 'PLAYER_LEAVE', seatIndex: mySeatIndex, peerId: myPeerId });
       } catch (e) {}
     }
-  });
+  }
+  window.addEventListener('beforeunload', notifyHostImLeaving);
+  window.addEventListener('pagehide', notifyHostImLeaving);
+
+  // 雙向心跳檢測（偵測手機鎖屏、網路瞬間斷線等無 close 事件的靜默離線）
+  setInterval(() => {
+    if (isHost) {
+      const now = Date.now();
+      gameState.players.forEach((p, idx) => {
+        if (idx > 0 && !p.isAI && p.peerId) {
+          const conn = guestConns[p.peerId];
+          const lastPing = guestLastSeen[idx] || now;
+          if (!conn || !conn.open || (now - lastPing > 9000)) {
+            convertSeatToAI(idx, '連線逾時中斷');
+          }
+        }
+      });
+    } else if (hostConn && hostConn.open && mySeatIndex > 0) {
+      try {
+        hostConn.send({ type: 'HEARTBEAT', seatIndex: mySeatIndex, peerId: myPeerId });
+      } catch (e) {}
+    }
+  }, 3000);
 
   /* ==========================================================================
      6. 房主與訪客 PeerJS 連線建置（含沙盒離線降級）
@@ -1015,21 +1051,26 @@
     const grid = document.getElementById('waiting-seats-grid');
     grid.innerHTML = gameState.players.map((p, idx) => {
       const isMe = idx === mySeatIndex;
+      const offlineBadge = p.offlineTakeover
+        ? `<span class="inline-block mt-1 px-1.5 py-0.5 rounded bg-orange-600/90 text-white text-[10px] font-black">${OFFLINE_AI_LABEL}</span>`
+        : '';
+
       const aiSelect = (isHost && p.isAI) ? `
-        <select data-seat-ai="${idx}" class="mt-1.5 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-amber-200">
+        ${offlineBadge}
+        <select data-seat-ai="${idx}" class="mt-1 w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-amber-200">
           <option value="sniper" ${p.aiPersonality === 'sniper' ? 'selected' : ''}>🎁 放槍王</option>
           <option value="standard" ${p.aiPersonality === 'standard' ? 'selected' : ''}>🙂 普通</option>
           <option value="god" ${p.aiPersonality === 'god' ? 'selected' : ''}>👑 麻將神</option>
-        </select>` : `<div class="mt-1.5 text-[11px] font-bold ${p.isAI ? 'text-sky-300' : 'text-emerald-300'}">
-          ${p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : '🟢 真人已入座')}
+        </select>` : `<div class="mt-1.5 text-[11px] font-bold ${p.offlineTakeover ? 'text-orange-300' : (p.isAI ? 'text-sky-300' : 'text-emerald-300')}">
+          ${p.offlineTakeover ? `🤖 ${OFFLINE_AI_LABEL}` : (p.isAI ? (AI_LABELS[p.aiPersonality] || '🙂普通') : (isMe ? '⭐ 您在此座位' : '🟢 真人已入座'))}
         </div>`;
 
-      return `<div class="rounded-xl p-2 border ${isMe ? 'bg-emerald-950/70 border-amber-400' : 'bg-slate-950/80 border-slate-800'}">
+      return `<div class="rounded-xl p-2 border ${isMe ? 'bg-emerald-950/70 border-amber-400' : (p.offlineTakeover ? 'bg-orange-950/40 border-orange-500/60' : 'bg-slate-950/80 border-slate-800')}">
         <div class="flex items-center justify-between text-[11px]">
           <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">${WIND_NAMES[p.wind]}</span>
           <span class="text-slate-400">${idx === 0 ? '房主/莊' : '座位 ' + (idx + 1)}</span>
         </div>
-        <div class="mt-1 font-bold text-xs sm:text-sm text-white truncate">${p.name}</div>
+        <div class="mt-1 font-bold text-xs sm:text-sm text-white truncate" title="${p.name}">${p.name}</div>
         ${aiSelect}
       </div>`;
     }).join('');
@@ -1051,7 +1092,15 @@
       shuffleMode: gameState.shuffleMode,
       turnTimeLimit: gameState.turnTimeLimit,
       players: gameState.players.map(p => ({
-        seat: p.seat, wind: p.wind, name: p.name, peerId: p.peerId, isAI: p.isAI, aiPersonality: p.aiPersonality, score: p.score
+        seat: p.seat,
+        wind: p.wind,
+        name: p.name,
+        originalName: p.originalName,
+        peerId: p.peerId,
+        isAI: p.isAI,
+        offlineTakeover: !!p.offlineTakeover,
+        aiPersonality: p.aiPersonality,
+        score: p.score
       }))
     };
     Object.values(guestConns).forEach(conn => {
@@ -1059,12 +1108,12 @@
     });
   }
 
-  function broadcastGameState() {
+  function broadcastGameState(extra = {}) {
     lastStateUpdatedAt = Date.now();
     if (!isHost) return;
     Object.entries(guestConns).forEach(([pid, conn]) => {
       if (conn && conn.open) {
-        conn.send({ type: 'GAME_STATE', state: gameState });
+        conn.send({ type: 'GAME_STATE', state: gameState, ...extra });
       }
     });
   }
@@ -1079,7 +1128,9 @@
     mySeatIndex = 0;
     roomCode = generateRoomCode();
     gameState.players[0].name = myName;
+    gameState.players[0].originalName = myName;
     gameState.players[0].isAI = false;
+    gameState.players[0].offlineTakeover = false;
 
     try {
       peer = new Peer('MJROOM-' + roomCode);
@@ -1092,7 +1143,13 @@
         conn.on('close', () => {
           const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
           if (seatIdx > 0) {
-            convertSeatToAI(seatIdx, '已斷線離桌，由 AI 接手代打');
+            convertSeatToAI(seatIdx, '已斷線離桌');
+          }
+        });
+        conn.on('error', () => {
+          const seatIdx = gameState.players.findIndex(p => p.peerId === conn.peer);
+          if (seatIdx > 0) {
+            convertSeatToAI(seatIdx, '連線異常中斷');
           }
         });
       });
@@ -1147,16 +1204,30 @@
 
   function handleHostReceiveData(conn, data) {
     if (!data || !data.type) return;
+    if (data.type === 'HEARTBEAT') {
+      const sIdx = typeof data.seatIndex === 'number'
+        ? data.seatIndex
+        : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
+      if (sIdx > 0) guestLastSeen[sIdx] = Date.now();
+      return;
+    }
+
     if (data.type === 'JOIN_REQUEST') {
       const pid = data.peerId || conn.peer;
+      const cleanName = (data.name || '').trim();
       guestConns[pid] = conn;
 
-      // 防止重複佔位
+      // 1. 防止同一連線重複佔位
       let seatIdx = gameState.players.findIndex(p => p.peerId === pid);
-      // 若之前同名玩家離線由 AI 暫代，允許重連取回座位
-      if (seatIdx === -1 && gameState.phase !== 'LOBBY') {
-        seatIdx = gameState.players.findIndex(p => p.isAI && p.name.startsWith(data.name + ' (🤖AI接管)'));
+      // 2. 若之前同名真人離線由 AI 暫代（offlineTakeover），允許重連取回原座位並恢復真人身份
+      if (seatIdx === -1 && cleanName) {
+        seatIdx = gameState.players.findIndex(p => p.offlineTakeover && p.originalName === cleanName);
       }
+      // 3. 尋找一般 AI 空位
+      if (seatIdx === -1) {
+        seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI && !p.offlineTakeover);
+      }
+      // 4. 若已無純 AI 空位，可補入離線代打座位
       if (seatIdx === -1) {
         seatIdx = gameState.players.findIndex((p, i) => i > 0 && p.isAI);
       }
@@ -1165,9 +1236,14 @@
         return;
       }
 
-      gameState.players[seatIdx].name = data.name || `玩家${seatIdx + 1}`;
+      const finalName = cleanName || `玩家${seatIdx + 1}`;
+      const wasTakeover = gameState.players[seatIdx].offlineTakeover;
+      gameState.players[seatIdx].name = finalName;
+      gameState.players[seatIdx].originalName = finalName;
       gameState.players[seatIdx].peerId = pid;
       gameState.players[seatIdx].isAI = false;
+      gameState.players[seatIdx].offlineTakeover = false;
+      guestLastSeen[seatIdx] = Date.now();
 
       conn.send({
         type: 'JOIN_ACCEPTED',
@@ -1178,6 +1254,9 @@
       renderWaitingSeats();
       broadcastLobbyState();
       if (gameState.phase !== 'LOBBY') {
+        if (wasTakeover) {
+          showActionBanner(`🟢 ${finalName} 已重新連線回歸！`);
+        }
         broadcastGameState();
         renderGameTable();
       }
@@ -1186,11 +1265,13 @@
         ? data.seatIndex
         : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
       if (seatIdx > 0) {
-        convertSeatToAI(seatIdx, '已主動離開牌桌，由 AI 接手代打');
+        convertSeatToAI(seatIdx, '主動離開牌桌');
       }
     } else if (data.type === 'PLAYER_ACTION') {
+      if (typeof data.seatIndex === 'number') guestLastSeen[data.seatIndex] = Date.now();
       processPlayerGameAction(data.seatIndex, data.action, data.payload);
     } else if (data.type === 'SYNC_REQUEST') {
+      if (typeof data.seatIndex === 'number') guestLastSeen[data.seatIndex] = Date.now();
       conn.send({ type: 'GAME_STATE', state: gameState });
     }
   }
@@ -1228,6 +1309,10 @@
       if (prevPhase === 'LOBBY' && gameState.phase !== 'LOBBY') {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
+      }
+      if (data.takeoverAlert) {
+        showActionBanner(`🤖 ${data.takeoverAlert}`);
+        audioEngine.speak('真人離線，AI代打');
       }
       renderGameTable();
     } else if (data.type === 'HOST_CLOSED') {
@@ -1305,7 +1390,6 @@
     setTimeout(() => {
       overlay.classList.add('hidden');
       if (triggerHostLogic && isHost) {
-        // 開局全桌自動補花
         let hadFlower = false;
         gameState.players.forEach(p => {
           let idx = p.hand.findIndex(t => !!FLOWER_MAP[t]);
@@ -1337,7 +1421,7 @@
     const label = document.getElementById('action-banner-text');
     label.textContent = text;
     box.classList.remove('hidden');
-    setTimeout(() => box.classList.add('hidden'), 1100);
+    setTimeout(() => box.classList.add('hidden'), 1350);
   }
 
   function hostDrawTileForSeat(seatIdx) {
@@ -1389,7 +1473,6 @@
       const p = gameState.players[gameState.turnIndex];
       if (!p || !p.isAI) return;
 
-      // 檢查 AI 是否自摸
       if (canHuStandard(p.hand)) {
         handlePlayerWin(gameState.turnIndex, true, p.drawnTile);
         return;
@@ -1427,7 +1510,6 @@
       audioEngine.playTileClack(1.0);
       audioEngine.speak(getTileSpokenName(tile));
 
-      // 檢查其他三家能否吃、碰、槓、胡
       const claims = {};
       for (let offset = 1; offset <= 3; offset++) {
         const s = (seatIdx + offset) % 4;
@@ -1454,7 +1536,6 @@
       gameState.claimResponses = {};
       gameState.turnDeadline = Date.now() + gameState.turnTimeLimit * 1000;
 
-      // AI 玩家自動決定吃碰槓胡
       Object.entries(claims).forEach(([sStr, opt]) => {
         const s = parseInt(sStr, 10);
         const aiP = gameState.players[s];
@@ -1473,14 +1554,12 @@
         }
       });
 
-      // 若全部有動作的玩家都已回應（例如全是 AI），直接結算動作
       const allAnswered = Object.keys(gameState.pendingClaims).every(k => !!gameState.claimResponses[k]);
       if (allAnswered) {
         resolveClaimPhase();
         return;
       }
 
-      // 保底超時強制推進（防止任何訪客網路卡死）
       if (claimWatchdogTimeout) clearTimeout(claimWatchdogTimeout);
       claimWatchdogTimeout = setTimeout(() => {
         if (gameState.phase === 'CLAIM') {
@@ -1516,7 +1595,6 @@
     if (!discardInfo) return;
     const { tile, fromSeat } = discardInfo;
 
-    // 優先權：胡 > 碰/槓 > 吃
     const entries = Object.entries(gameState.claimResponses);
     const huEntry = entries.find(([, d]) => d && d.type === 'HU');
     if (huEntry) {
@@ -1587,7 +1665,6 @@
       return;
     }
 
-    // 全部放棄，輪到下家摸牌
     const nextSeat = (fromSeat + 1) % 4;
     hostDrawTileForSeat(nextSeat);
   }
@@ -1666,7 +1743,7 @@
   }
 
   /* ==========================================================================
-     9. 牌桌畫面渲染（相對於 mySeatIndex 的下/右/對/左視角）
+     9. 牌桌畫面渲染（相對於 mySeatIndex 的下/右/對/左視角 + 醒目標示「真人離線\AI代打」）
      ========================================================================== */
   function renderGameTable() {
     const ruleTagMap = { tw16: '🇹🇼 台灣16張', jp13: '🇯🇵 日本立直', hk13: '🇭🇰 廣東13張' };
@@ -1684,17 +1761,21 @@
       const isDealer = seatIdx === gameState.dealerIndex;
       const badge = `${isDealer ? '<span class="px-1 rounded bg-amber-500 text-slate-950 font-black">莊</span>' : ''}
         <span class="px-1 rounded bg-red-600 text-white font-bold">${WIND_NAMES[p.wind][0]}</span>`;
-      const aiTag = p.isAI ? `<span class="px-1 rounded bg-sky-500/25 text-sky-300 text-[10px]">${AI_LABELS[p.aiPersonality] || 'AI'}</span>` : '';
+
+      const displayPlayerName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
+      const aiTag = p.offlineTakeover
+        ? `<span class="px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-black tracking-tight shadow-sm">${OFFLINE_AI_LABEL}</span>`
+        : (p.isAI ? `<span class="px-1 rounded bg-sky-500/25 text-sky-300 text-[10px]">${AI_LABELS[p.aiPersonality] || 'AI'}</span>` : '');
       const flowerHtml = p.flowers.map(renderFlowerMiniBadge).join('');
 
       const infoEl = document.getElementById(`info-${pos}`);
       if (pos === 'bottom' || pos === 'top') {
-        infoEl.innerHTML = `${badge} <span class="font-bold text-white truncate max-w-[110px]">${p.name}</span> ${aiTag}
+        infoEl.innerHTML = `${badge} <span class="font-bold text-white truncate max-w-[110px]">${displayPlayerName}</span> ${aiTag}
           <span class="text-amber-300 font-mono font-bold">${p.score}分</span>
           <span class="flex items-center gap-0.5">${flowerHtml}</span>`;
       } else {
         infoEl.innerHTML = `<div class="flex items-center gap-0.5">${badge}</div>
-          <div class="font-bold text-white truncate w-full mt-0.5">${p.name}</div>
+          <div class="font-bold text-white truncate w-full mt-0.5">${displayPlayerName}</div>
           ${aiTag}
           <div class="text-amber-300 font-mono text-[10px]">${p.score}</div>
           <div class="flex flex-wrap justify-center gap-0.5 mt-0.5">${flowerHtml}</div>`;
@@ -1713,7 +1794,7 @@
         </div>
       `).join('');
 
-      // 渲染牌河（超過 12 張自動切換緊湊小牌河並自動捲動至最新出牌）
+      // 渲染牌河
       const riverEl = document.getElementById(`river-${pos}`);
       riverEl.classList.toggle('river-compact', p.river.length > 12);
       riverEl.innerHTML = p.river.map((t, rIdx) => {
@@ -1772,7 +1853,8 @@
           document.getElementById('btn-self-hu').onclick = () => processPlayerGameAction(mySeatIndex, 'SELF_HU');
         }
       } else {
-        banner.textContent = `⏳ 等待 ${curP ? curP.name : ''} 出牌中...`;
+        const curName = curP ? (curP.offlineTakeover ? `${curP.originalName} (${OFFLINE_AI_LABEL})` : curP.name) : '';
+        banner.textContent = `⏳ 等待 ${curName} 出牌中...`;
       }
     } else if (gameState.phase === 'CLAIM') {
       const myClaim = gameState.pendingClaims[mySeatIndex];
@@ -1806,6 +1888,17 @@
     }
   }
 
+  function renderPlayerScoreRowHTML(p) {
+    const baseName = p.originalName || p.name.replace(/\s*\(真人離線\\AI代打\)/g, '');
+    const badge = p.offlineTakeover
+      ? `<span class="ml-1.5 px-1.5 py-0.5 rounded bg-orange-600 text-white text-[10px] font-black">${OFFLINE_AI_LABEL}</span>`
+      : '';
+    return `<div class="flex justify-between items-center px-3 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs">
+      <span class="font-bold text-white flex items-center">${baseName}${badge}</span>
+      <span class="font-mono text-amber-300 font-bold">${p.score} 分</span>
+    </div>`;
+  }
+
   function renderRoundEndModal() {
     const modal = document.getElementById('round-end-modal');
     const summary = gameState.roundSummary;
@@ -1819,10 +1912,7 @@
       titleEl.textContent = '🀄 海底流局';
       subEl.textContent = '牌牆已摸完，無人胡牌';
       bodyEl.innerHTML = `<div class="space-y-2">
-        ${gameState.players.map(p => `<div class="flex justify-between p-2 rounded bg-slate-950 border border-slate-800">
-          <span class="font-bold text-white">${p.name}</span>
-          <span class="font-mono text-amber-300 font-bold">${p.score} 分</span>
-        </div>`).join('')}
+        ${gameState.players.map(renderPlayerScoreRowHTML).join('')}
       </div>`;
     } else {
       titleEl.textContent = `🎉 ${summary.winnerName} ${summary.isSelfDraw ? '自摸' : '胡牌'}！`;
@@ -1844,10 +1934,7 @@
         </div>
         <div class="space-y-1">
           <div class="text-xs font-bold text-slate-400">目前四家積分：</div>
-          ${gameState.players.map(p => `<div class="flex justify-between px-3 py-1.5 rounded bg-slate-950 border border-slate-800 text-xs">
-            <span class="font-bold text-white">${p.name}</span>
-            <span class="font-mono text-amber-300 font-bold">${p.score} 分</span>
-          </div>`).join('')}
+          ${gameState.players.map(renderPlayerScoreRowHTML).join('')}
         </div>
       `;
     }
@@ -1907,7 +1994,7 @@
         resolveClaimPhase();
       }
     } else if (hostConn && hostConn.open) {
-      hostConn.send({ type: 'SYNC_REQUEST' });
+      hostConn.send({ type: 'SYNC_REQUEST', seatIndex: mySeatIndex });
     }
   });
 
