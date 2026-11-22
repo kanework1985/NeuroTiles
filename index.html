@@ -302,8 +302,35 @@
 
     @media (orientation: portrait) and (max-width: 767px) {
       .river-tile {
-        width: 21px;
-        height: 29px;
+        width: 18px;
+        height: 25px;
+      }
+      /* 直式牌河超過 12 張時自動切換緊湊微縮模式，確保打到海底牌也全數可見不裁切 */
+      .river-compact .river-tile {
+        width: 15px;
+        height: 21px;
+      }
+      #river-top,
+      #river-bottom {
+        width: 196px !important;
+        height: 78px !important;
+        overflow-y: auto !important;
+        scrollbar-width: none;
+      }
+      #river-top::-webkit-scrollbar,
+      #river-bottom::-webkit-scrollbar {
+        display: none;
+      }
+      #river-left,
+      #river-right {
+        width: 56px !important;
+        height: 118px !important;
+        overflow-y: auto !important;
+        scrollbar-width: none;
+      }
+      #river-left::-webkit-scrollbar,
+      #river-right::-webkit-scrollbar {
+        display: none;
       }
     }
 
@@ -645,13 +672,13 @@
 
       <!-- 中央牌河與風圈羅盤區域 -->
       <div class="flex-1 h-full flex flex-col items-center justify-center relative max-w-3xl mx-auto">
-        <!-- 對家出牌河（固定高度與欄數，避免出牌換行造成畫面跳動） -->
-        <div id="river-top" class="grid grid-cols-8 sm:grid-cols-10 gap-0.5 w-[176px] sm:w-[330px] h-[62px] sm:h-[90px] content-end justify-items-center mb-1.5 overflow-hidden"></div>
+        <!-- 對家出牌河（固定高度與欄數，直式多牌自動微縮捲動不裁切） -->
+        <div id="river-top" class="grid grid-cols-10 gap-0.5 w-[196px] sm:w-[330px] h-[78px] sm:h-[90px] content-end justify-items-center mb-1.5 overflow-y-auto no-scrollbar"></div>
 
         <!-- 中間橫排：左家牌河 + 中央羅盤 + 右家牌河 -->
         <div class="w-full flex items-center justify-center gap-1.5 sm:gap-4 my-0.5">
-          <!-- 左家出牌河（固定寬高與欄數） -->
-          <div id="river-left" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 w-[66px] sm:w-[132px] h-[94px] sm:h-[138px] content-start justify-items-center overflow-hidden"></div>
+          <!-- 左家出牌河（固定寬高與欄數，直式多牌自動微縮捲動不裁切） -->
+          <div id="river-left" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 w-[56px] sm:w-[132px] h-[118px] sm:h-[138px] content-start justify-items-center overflow-y-auto no-scrollbar"></div>
 
           <!-- 中央風圈、倒數計時器與剩餘牌數指示器（固定寬高不隨數字變化縮放） -->
           <div id="center-compass" class="w-[104px] h-[104px] sm:w-[144px] sm:h-[144px] rounded-2xl bg-stone-950/90 border-2 border-amber-500/60 shadow-2xl flex flex-col items-center justify-center p-1.5 relative shrink-0 overflow-hidden">
@@ -673,12 +700,12 @@
             </div>
           </div>
 
-          <!-- 右家出牌河（固定寬高與欄數） -->
-          <div id="river-right" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 w-[66px] sm:w-[132px] h-[94px] sm:h-[138px] content-start justify-items-center overflow-hidden"></div>
+          <!-- 右家出牌河（固定寬高與欄數，直式多牌自動微縮捲動不裁切） -->
+          <div id="river-right" class="grid grid-cols-3 sm:grid-cols-4 gap-0.5 w-[56px] sm:w-[132px] h-[118px] sm:h-[138px] content-start justify-items-center overflow-y-auto no-scrollbar"></div>
         </div>
 
-        <!-- 自家出牌河（固定高度與欄數，避免出牌換行造成畫面跳動） -->
-        <div id="river-bottom" class="grid grid-cols-8 sm:grid-cols-10 gap-0.5 w-[176px] sm:w-[330px] h-[62px] sm:h-[90px] content-start justify-items-center mt-1.5 overflow-hidden"></div>
+        <!-- 自家出牌河（固定高度與欄數，直式多牌自動微縮捲動不裁切） -->
+        <div id="river-bottom" class="grid grid-cols-10 gap-0.5 w-[196px] sm:w-[330px] h-[78px] sm:h-[90px] content-start justify-items-center mt-1.5 overflow-y-auto no-scrollbar"></div>
 
         <!-- 洗牌／發牌動畫視覺層 -->
         <div id="shuffle-visual-overlay" class="hidden pointer-events-none absolute inset-0 flex flex-col items-center justify-center z-40 bg-black/60 backdrop-blur-[2px] rounded-2xl">
@@ -3514,6 +3541,11 @@
     function renderDiscardRiver(containerId, riverTiles, lastDiscard, ownerSeat) {
       const container = document.getElementById(containerId);
       container.innerHTML = '';
+      if (riverTiles.length > 12) {
+        container.classList.add('river-compact');
+      } else {
+        container.classList.remove('river-compact');
+      }
       riverTiles.forEach((t, idx) => {
         const div = document.createElement('div');
         const isLatest = lastDiscard && lastDiscard.fromSeat === ownerSeat && idx === riverTiles.length - 1 && appState.game.phase === 'CLAIM';
@@ -3521,6 +3553,7 @@
         div.innerHTML = renderTileInnerHTML(t, true);
         container.appendChild(div);
       });
+      container.scrollTop = container.scrollHeight;
     }
 
     function renderMyBottomSeat(me) {
