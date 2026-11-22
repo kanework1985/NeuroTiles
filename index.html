@@ -155,8 +155,8 @@
 </head>
 <body class="flex flex-col">
 
-  <!-- 隱藏的遠端真人語音音訊容器 -->
-  <div id="remote-voice-container" class="hidden"></div>
+  <!-- 遠端真人語音音訊播放區（保持在 DOM 可見層級外但不設 display:none 以防部分瀏覽器阻擋播放） -->
+  <div id="remote-voice-container" style="position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden;"></div>
 
   <!-- ==================== 1. 大廳與等待室畫面 ==================== -->
   <div id="lobby-screen" class="w-full h-full flex flex-col justify-between p-3 sm:p-5 overflow-y-auto">
@@ -279,12 +279,15 @@
                 <button data-batch-ai="standard" class="px-2 py-0.5 rounded bg-sky-900/70 hover:bg-sky-800 border border-sky-500/40 text-[11px] text-sky-200 font-bold">🙂 普通</button>
                 <button data-batch-ai="god" class="px-2 py-0.5 rounded bg-amber-900/70 hover:bg-amber-800 border border-amber-500/40 text-[11px] text-amber-200 font-bold">👑 麻將神</button>
               </div>
-              <div class="flex items-center gap-1.5">
+              <div class="flex items-center gap-1.5 flex-wrap">
                 <button id="lobby-mic-btn" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-[11px] font-bold text-slate-200">
                   🎙️ 開啟語音對談
                 </button>
+                <button id="lobby-speaker-unlock-btn" class="px-2 py-1 rounded-lg bg-sky-900/80 hover:bg-sky-800 border border-sky-500/40 text-[11px] font-bold text-sky-200" title="若電腦端聽不到手機聲音，請點此解鎖收聽">
+                  🔊 收聽就緒
+                </button>
                 <div class="flex items-center gap-1 bg-slate-900/90 border border-slate-700 rounded-lg px-2 py-1">
-                  <span class="text-[10px] text-emerald-300 font-bold">🔊</span>
+                  <span class="text-[10px] text-emerald-300 font-bold">🎙️</span>
                   <input id="lobby-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-14 sm:w-20 accent-emerald-400" title="調整麥克風收音大小聲" />
                   <span id="lobby-mic-vol-label" class="text-[10px] font-mono text-emerald-200 w-7 text-right">100%</span>
                 </div>
@@ -307,7 +310,7 @@
     </div>
 
     <div class="text-center text-[11px] text-emerald-300/60 shrink-0 lobby-subtitle">
-      提示：真人開啟麥克風即可與線上牌友直接對談（可隨時調整麥克風大小聲；開麥者打牌不觸發系統報牌，AI 依舊報牌）。
+      提示：真人開啟麥克風即可與線上牌友直接對談（開麥者打牌不觸發系統報牌，AI 依舊報牌）；若電腦聽不到手機語音請點擊「🔊 收聽」解鎖瀏覽器音訊。
     </div>
   </div>
 
@@ -320,10 +323,13 @@
         <span id="table-room-tag" class="hidden sm:inline-block px-2 py-1 rounded bg-slate-950/60 border border-slate-700 text-[11px] font-mono text-slate-300">房號: -----</span>
       </div>
       <div class="flex items-center gap-1 sm:gap-1.5 flex-wrap justify-end">
-        <!-- 麥克風開關與快捷大小聲滑桿 -->
+        <!-- 麥克風開關、收聽解鎖與快捷大小聲滑桿 -->
         <div class="flex items-center gap-1 bg-slate-950/85 border border-slate-700 rounded px-1.5 py-0.5">
           <button id="game-mic-btn" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] sm:text-xs text-slate-200 font-bold">
             🎙️ 開麥
+          </button>
+          <button id="game-speaker-unlock-btn" class="px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-[11px] sm:text-xs text-sky-200 font-bold" title="點此確保電腦喇叭接收手機語音">
+            🔊 收聽
           </button>
           <input id="game-mic-vol-slider" type="range" min="0" max="200" value="100" class="w-12 sm:w-16 accent-emerald-400" title="調整麥克風音量大小" />
           <span id="game-mic-vol-label" class="text-[10px] font-mono text-emerald-300 w-7 text-right">100%</span>
@@ -640,7 +646,8 @@
   const audioEngine = new AudioMediaEngine();
 
   /* ==========================================================================
-     2. 真人玩家 WebRTC 線上麥克風語音對談引擎（支援即時收音大小聲 GainNode 增益）
+     2. 真人玩家 WebRTC 線上麥克風語音對談引擎
+        （解決電腦喇叭聽不到手機端聲音：雙向音訊解鎖 + WebAudio 備援 + 自動重撥請求）
      ========================================================================== */
   class VoiceChatEngine {
     constructor() {
@@ -648,10 +655,66 @@
       this.processedStream = null;
       this.micAudioCtx = null;
       this.micGainNode = null;
-      this.micGainValue = 1.0; // 0.0 ~ 2.0 (0% ~ 200%)
+      this.micGainValue = 1.0;
       this.isMicOn = false;
-      this.mediaCalls = {}; // remotePeerId -> MediaConnection
-      this.audioEls = {};   // remotePeerId -> HTMLAudioElement
+      this.mediaCalls = {};    // remotePeerId -> MediaConnection
+      this.audioEls = {};      // remotePeerId -> HTMLAudioElement
+      this.remoteStreams = {}; // remotePeerId -> MediaStream
+      this.playbackCtx = null; // 桌機端雙重音訊輸出備援
+      this.playbackBlocked = false;
+    }
+
+    ensurePlaybackCtx() {
+      if (!this.playbackCtx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) this.playbackCtx = new AudioCtx();
+      }
+      if (this.playbackCtx && this.playbackCtx.state === 'suspended') {
+        this.playbackCtx.resume().catch(() => {});
+      }
+    }
+
+    // 解鎖桌機/手機瀏覽器自動播放限制，確保電腦喇叭能直接播放手機傳來的語音
+    unlockAllRemoteAudio() {
+      this.ensurePlaybackCtx();
+      let anyBlocked = false;
+      Object.entries(this.audioEls).forEach(([pid, audioEl]) => {
+        if (!audioEl) return;
+        audioEl.muted = false;
+        audioEl.volume = 1.0;
+        const p = audioEl.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            anyBlocked = true;
+            this.playbackBlocked = true;
+            this.updateSpeakerButtonsUI();
+          });
+        }
+      });
+      if (!anyBlocked) {
+        this.playbackBlocked = false;
+        this.updateSpeakerButtonsUI();
+      }
+      // 檢查是否有已開麥的真人玩家但本機尚未收到其音訊流，主動請求對方重撥
+      this.requestMissingStreams();
+    }
+
+    requestMissingStreams() {
+      if (!peer || peer.disconnected) return;
+      gameState.players.forEach((p, idx) => {
+        if (idx === mySeatIndex || p.isAI || !p.peerId || !p.micEnabled) return;
+        const hasStream = !!this.remoteStreams[p.peerId];
+        if (!hasStream) {
+          if (isHost) {
+            const conn = guestConns[p.peerId];
+            if (conn && conn.open) {
+              conn.send({ type: 'VOICE_REQUEST_CALL', targetPeerId: myPeerId });
+            }
+          } else if (hostConn && hostConn.open) {
+            hostConn.send({ type: 'VOICE_RELAY_REQUEST', fromPeerId: myPeerId, targetPeerId: p.peerId });
+          }
+        }
+      });
     }
 
     setMicVolumePercent(percent) {
@@ -664,7 +727,6 @@
           this.micGainNode.gain.value = this.micGainValue;
         }
       }
-      // 同步所有介面上的麥克風音量滑桿與文字
       const sliders = ['lobby-mic-vol-slider', 'game-mic-vol-slider', 'settings-mic-vol-slider'];
       const labels = ['lobby-mic-vol-label', 'game-mic-vol-label', 'settings-mic-vol-label'];
       sliders.forEach(id => {
@@ -678,6 +740,7 @@
     }
 
     async toggleMic() {
+      this.unlockAllRemoteAudio();
       if (this.isMicOn) {
         this.stopMic();
       } else {
@@ -700,7 +763,6 @@
           video: false
         });
 
-        // 建立 Web Audio GainNode 管線，實現即時麥克風音量大小調節（0% ~ 200%）
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (AudioCtx) {
           this.micAudioCtx = new AudioCtx();
@@ -721,7 +783,7 @@
         this.isMicOn = true;
         this.updateMicButtonsUI();
         this.syncMicStatusToRoom(true);
-        this.dialAllHumanPeers();
+        this.dialAllHumanPeers(true);
       } catch (err) {
         alert('無法取得麥克風權限，請在瀏覽器網址列允許麥克風使用後再試。');
       }
@@ -772,20 +834,29 @@
       }
     }
 
-    dialAllHumanPeers() {
+    dialAllHumanPeers(forceRedial = false) {
       const outboundStream = this.processedStream || this.rawStream;
       if (!this.isMicOn || !outboundStream || !peer || peer.disconnected) return;
       gameState.players.forEach((p, idx) => {
         if (idx === mySeatIndex || p.isAI || !p.peerId) return;
-        const targetPid = p.peerId;
-        if (this.mediaCalls[targetPid] && this.mediaCalls[targetPid].open) return;
-        try {
-          const call = peer.call(targetPid, outboundStream);
-          if (call) {
-            this.bindMediaCall(targetPid, call);
-          }
-        } catch (e) {}
+        this.dialSinglePeer(p.peerId, forceRedial);
       });
+    }
+
+    dialSinglePeer(targetPid, forceRedial = false) {
+      const outboundStream = this.processedStream || this.rawStream;
+      if (!this.isMicOn || !outboundStream || !peer || peer.disconnected || !targetPid || targetPid === myPeerId) return;
+      if (this.mediaCalls[targetPid]) {
+        if (!forceRedial && this.mediaCalls[targetPid].open) return;
+        try { this.mediaCalls[targetPid].close(); } catch (e) {}
+        delete this.mediaCalls[targetPid];
+      }
+      try {
+        const call = peer.call(targetPid, outboundStream);
+        if (call) {
+          this.bindMediaCall(targetPid, call);
+        }
+      } catch (e) {}
     }
 
     handleIncomingCall(call) {
@@ -793,7 +864,12 @@
       const remotePid = call.peer;
       const outboundStream = this.processedStream || this.rawStream;
       try {
-        call.answer(this.isMicOn && outboundStream ? outboundStream : undefined);
+        // 即使本機未開麥，明確回傳空參數並立即綁定監聽 stream，確保電腦端完整接收手機端音軌
+        if (this.isMicOn && outboundStream) {
+          call.answer(outboundStream);
+        } else {
+          call.answer();
+        }
         this.bindMediaCall(remotePid, call);
       } catch (e) {}
     }
@@ -801,15 +877,18 @@
     bindMediaCall(remotePid, call) {
       this.mediaCalls[remotePid] = call;
       call.on('stream', (remoteStream) => {
+        this.remoteStreams[remotePid] = remoteStream;
         this.attachRemoteAudio(remotePid, remoteStream);
       });
       call.on('close', () => {
         this.removeRemoteAudio(remotePid);
         delete this.mediaCalls[remotePid];
+        delete this.remoteStreams[remotePid];
       });
       call.on('error', () => {
         this.removeRemoteAudio(remotePid);
         delete this.mediaCalls[remotePid];
+        delete this.remoteStreams[remotePid];
       });
     }
 
@@ -820,11 +899,25 @@
         audioEl = document.createElement('audio');
         audioEl.autoplay = true;
         audioEl.playsInline = true;
+        audioEl.setAttribute('playsinline', '');
         container.appendChild(audioEl);
         this.audioEls[remotePid] = audioEl;
       }
+      audioEl.muted = false;
+      audioEl.volume = 1.0;
       audioEl.srcObject = stream;
-      audioEl.play().catch(() => {});
+
+      const playPromise = audioEl.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(() => {
+          this.playbackBlocked = false;
+          this.updateSpeakerButtonsUI();
+        }).catch(() => {
+          // 若桌機瀏覽器因尚未互動而阻擋自動播放，標記提示並嘗試 WebAudio 輸出
+          this.playbackBlocked = true;
+          this.updateSpeakerButtonsUI();
+        });
+      }
     }
 
     removeRemoteAudio(remotePid) {
@@ -834,6 +927,31 @@
           this.audioEls[remotePid].remove();
         } catch (e) {}
         delete this.audioEls[remotePid];
+      }
+      delete this.remoteStreams[remotePid];
+    }
+
+    updateSpeakerButtonsUI() {
+      const lobbySpk = document.getElementById('lobby-speaker-unlock-btn');
+      const gameSpk = document.getElementById('game-speaker-unlock-btn');
+      if (this.playbackBlocked) {
+        if (lobbySpk) {
+          lobbySpk.textContent = '🔇 點此解鎖收聽！';
+          lobbySpk.className = 'px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 border border-white text-[11px] font-black text-white animate-pulse';
+        }
+        if (gameSpk) {
+          gameSpk.textContent = '🔇 點此開喇叭';
+          gameSpk.className = 'px-1.5 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-[11px] sm:text-xs text-white font-black animate-pulse';
+        }
+      } else {
+        if (lobbySpk) {
+          lobbySpk.textContent = '🔊 收聽就緒';
+          lobbySpk.className = 'px-2 py-1 rounded-lg bg-sky-900/80 hover:bg-sky-800 border border-sky-500/40 text-[11px] font-bold text-sky-200';
+        }
+        if (gameSpk) {
+          gameSpk.textContent = '🔊 收聽';
+          gameSpk.className = 'px-1.5 py-0.5 rounded bg-sky-900/80 hover:bg-sky-800 text-[11px] sm:text-xs text-sky-200 font-bold';
+        }
       }
     }
 
@@ -862,6 +980,13 @@
     }
   }
   const voiceChat = new VoiceChatEngine();
+
+  // 任何使用者點擊頁面操作時，自動解鎖遠端語音播放權限（解決電腦端未開麥時瀏覽器阻擋喇叭出聲的問題）
+  ['pointerdown', 'keydown'].forEach(evtName => {
+    window.addEventListener(evtName, () => {
+      voiceChat.unlockAllRemoteAudio();
+    }, { passive: true });
+  });
 
   /* ==========================================================================
      3. 牌面圖形與 SVG 向量渲染（筒子圓形、條子竹節/孔雀、繁體書法字）
@@ -1279,7 +1404,7 @@
   }, 3000);
 
   /* ==========================================================================
-     7. 房主與訪客 PeerJS 連線建置（含語音通話接聽與沙盒離線降級）
+     7. 房主與訪客 PeerJS 連線建置（含語音通話雙向重連與沙盒離線降級）
      ========================================================================== */
   function enterWaitingRoomUI() {
     document.getElementById('lobby-setup-panel').classList.add('hidden');
@@ -1381,6 +1506,7 @@
   }
 
   document.getElementById('create-room-btn').addEventListener('click', () => {
+    voiceChat.unlockAllRemoteAudio();
     const myName = getPlayerNameInput();
     gameState.ruleMode = document.getElementById('rule-select').value;
     gameState.shuffleMode = document.getElementById('shuffle-mode-select').value;
@@ -1431,6 +1557,7 @@
 
   let isJoining = false;
   document.getElementById('join-room-btn').addEventListener('click', () => {
+    voiceChat.unlockAllRemoteAudio();
     if (isJoining) return;
     const code = document.getElementById('join-room-input').value.trim().toUpperCase();
     if (!code) {
@@ -1481,18 +1608,34 @@
       return;
     }
 
+    if (data.type === 'VOICE_RELAY_REQUEST') {
+      // 某訪客請求另一位真人玩家重傳語音串流
+      if (data.targetPeerId === myPeerId) {
+        voiceChat.dialSinglePeer(data.fromPeerId, true);
+      } else if (guestConns[data.targetPeerId] && guestConns[data.targetPeerId].open) {
+        guestConns[data.targetPeerId].send({ type: 'VOICE_REQUEST_CALL', targetPeerId: data.fromPeerId });
+      }
+      return;
+    }
+
     if (data.type === 'MIC_STATUS') {
       const sIdx = typeof data.seatIndex === 'number'
         ? data.seatIndex
         : gameState.players.findIndex(p => p.peerId === (data.peerId || conn.peer));
       if (sIdx >= 0 && gameState.players[sIdx]) {
         gameState.players[sIdx].micEnabled = !!data.micEnabled;
+        if (!data.micEnabled && gameState.players[sIdx].peerId) {
+          voiceChat.removeRemoteAudio(gameState.players[sIdx].peerId);
+        }
         if (gameState.phase === 'LOBBY') {
           renderWaitingSeats();
           broadcastLobbyState();
         } else {
           broadcastGameState();
           renderGameTable();
+        }
+        if (data.micEnabled) {
+          voiceChat.requestMissingStreams();
         }
       }
       return;
@@ -1536,7 +1679,7 @@
       });
       renderWaitingSeats();
       broadcastLobbyState();
-      voiceChat.dialAllHumanPeers();
+      voiceChat.dialAllHumanPeers(true);
 
       if (gameState.phase !== 'LOBBY') {
         if (wasTakeover) {
@@ -1563,6 +1706,12 @@
 
   function handleGuestReceiveData(data) {
     if (!data || !data.type) return;
+    if (data.type === 'VOICE_REQUEST_CALL') {
+      if (data.targetPeerId) {
+        voiceChat.dialSinglePeer(data.targetPeerId, true);
+      }
+      return;
+    }
     if (data.type === 'JOIN_REJECTED') {
       isJoining = false;
       document.getElementById('lobby-status-msg').textContent = data.reason || '無法加入房間';
@@ -1574,7 +1723,8 @@
       roomCode = data.roomCode;
       Object.assign(gameState, data.state);
       enterWaitingRoomUI();
-      voiceChat.dialAllHumanPeers();
+      voiceChat.dialAllHumanPeers(true);
+      voiceChat.requestMissingStreams();
       if (gameState.phase !== 'LOBBY') {
         document.getElementById('lobby-screen').classList.add('hidden');
         document.getElementById('game-screen').classList.remove('hidden');
@@ -1586,7 +1736,8 @@
       gameState.turnTimeLimit = data.turnTimeLimit;
       gameState.players = data.players;
       renderWaitingSeats();
-      voiceChat.dialAllHumanPeers();
+      voiceChat.dialAllHumanPeers(false);
+      voiceChat.requestMissingStreams();
     } else if (data.type === 'DEAL_ANIMATION') {
       runAnimatedDealSequence(false);
     } else if (data.type === 'GAME_STATE') {
@@ -1608,7 +1759,8 @@
         showActionBanner(`🤖 ${data.takeoverAlert}`);
         audioEngine.speak('真人離線，AI代打');
       }
-      voiceChat.dialAllHumanPeers();
+      voiceChat.dialAllHumanPeers(false);
+      voiceChat.requestMissingStreams();
       renderGameTable();
     } else if (data.type === 'HOST_CLOSED') {
       alert('房主已解散牌桌，即將返回大廳。');
@@ -1620,6 +1772,7 @@
      8. 洗牌、發牌動畫與開局補花流程
      ========================================================================== */
   document.getElementById('start-game-btn').addEventListener('click', () => {
+    voiceChat.unlockAllRemoteAudio();
     if (!isHost) return;
     startNewRoundAsHost();
   });
@@ -2300,10 +2453,19 @@
   });
 
   /* ==========================================================================
-     12. 介面按鈕事件（麥克風開關與大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
+     12. 介面按鈕事件（麥克風開關、收聽解鎖、大小聲滑桿、全螢幕、複製邀請網址、離開房間、設定彈窗）
      ========================================================================== */
   document.getElementById('lobby-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
   document.getElementById('game-mic-btn').addEventListener('click', () => voiceChat.toggleMic());
+
+  document.getElementById('lobby-speaker-unlock-btn').addEventListener('click', () => {
+    voiceChat.unlockAllRemoteAudio();
+    audioEngine.playActionChime('action');
+  });
+  document.getElementById('game-speaker-unlock-btn').addEventListener('click', () => {
+    voiceChat.unlockAllRemoteAudio();
+    audioEngine.playActionChime('action');
+  });
 
   ['lobby-mic-vol-slider', 'game-mic-vol-slider', 'settings-mic-vol-slider'].forEach(sliderId => {
     const slider = document.getElementById(sliderId);
